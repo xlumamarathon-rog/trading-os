@@ -242,3 +242,30 @@ async def test_short_side_symmetry():
     assert pos.stop == pytest.approx(100.0)             # breakeven downward
     await mgr.on_bar("X", 93.5, 92.0, 92.5, TREND)      # extreme low 92 ⇒ trail above
     assert pos.stop <= 100.0 and pos.stop == pytest.approx(92.0 + 3.0 * 1.5)
+
+
+async def test_composite_adapter_routes_by_leg():
+    """Sim-discovered gap: crypto lots must never hit the India integer path."""
+    from src.exits.adapters.composite import CompositeStopAdapter
+
+    class Recorder:
+        def __init__(self):
+            self.calls = []
+
+        async def place_stop(self, symbol, qty, stop_price, leg):
+            self.calls.append(("place", symbol, qty))
+            return f"{id(self)}-S1"
+
+        async def modify_stop(self, oid, price, leg):
+            self.calls.append(("modify", oid, price))
+
+        async def exit_market(self, symbol, qty, leg):
+            self.calls.append(("exit", symbol, qty))
+
+    india, mt5 = Recorder(), Recorder()
+    comp = CompositeStopAdapter(india, mt5)
+    await comp.place_stop("RELIANCE", 15, 2450.0, "india")
+    await comp.place_stop("BTCUSD", 0.62, 58000.0, "mt5_crypto")
+    await comp.exit_market("EURUSD", 0.5, "mt5_forex")
+    assert india.calls == [("place", "RELIANCE", 15)]
+    assert ("place", "BTCUSD", 0.62) in mt5.calls and ("exit", "EURUSD", 0.5) in mt5.calls

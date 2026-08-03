@@ -1,0 +1,32 @@
+{
+ "paper_days_completed": 5,
+ "clean_reconciliation_streak": 2,
+ "sebi_checks_passed": false,
+ "human_ack": "",
+ "history": [
+  {
+   "ts": 1785786015.1640277,
+   "clean": true
+  },
+  {
+   "ts": 1785786015.176268,
+   "clean": true
+  },
+  {
+   "ts": 1785786015.1882155,
+   "clean": true
+  },
+  {
+   "ts": 1785786015.2012563,
+   "clean": false
+  },
+  {
+   "ts": 1785786015.2102594,
+   "clean": true
+  },
+  {
+   "ts": 1785786015.247999,
+   "clean": true
+  }
+ ]
+}

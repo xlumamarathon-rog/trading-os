@@ -1,0 +1,74 @@
+[
+ {
+  "day": "Day 1  trend-up",
+  "equity": 1006916.99,
+  "fills_today": 8,
+  "costs_cum": 224.71,
+  "open_pos": 3,
+  "resting_stops": 3,
+  "recon": "CLEAN",
+  "gate_days": 1,
+  "streak": 1,
+  "events": 35
+ },
+ {
+  "day": "Day 2  chop",
+  "equity": 1007079.35,
+  "fills_today": 1,
+  "costs_cum": 252.12,
+  "open_pos": 3,
+  "resting_stops": 3,
+  "recon": "CLEAN",
+  "gate_days": 2,
+  "streak": 2,
+  "events": 7
+ },
+ {
+  "day": "Day 3  trend-up + KILL DRILL",
+  "equity": 1008982.67,
+  "fills_today": 3,
+  "costs_cum": 339.64,
+  "open_pos": 0,
+  "resting_stops": 0,
+  "recon": "CLEAN",
+  "gate_days": 3,
+  "streak": 3,
+  "events": 5
+ },
+ {
+  "day": "Day 4  chop + RECON DRILL",
+  "equity": 1008458.32,
+  "fills_today": 3,
+  "costs_cum": 430.46,
+  "open_pos": 3,
+  "resting_stops": 3,
+  "recon": "MISMATCH (does NOT count)",
+  "gate_days": 3,
+  "streak": 0,
+  "events": 4
+ },
+ {
+  "day": "Day 5  CRASH",
+  "equity": 1006963.99,
+  "fills_today": 3,
+  "costs_cum": 531.26,
+  "open_pos": 0,
+  "resting_stops": 1,
+  "recon": "CLEAN",
+  "gate_days": 4,
+  "streak": 1,
+  "events": 5
+ },
+ {
+  "day": "Day 6  recovery trend",
+  "equity": 1014168.44,
+  "fills_today": 9,
+  "costs_cum": 783.53,
+  "open_pos": 3,
+  "resting_stops": 4,
+  "recon": "CLEAN",
+  "gate_days": 5,
+  "streak": 2,
+  "events": 42
+ }
+]
