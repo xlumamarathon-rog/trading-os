@@ -2,15 +2,16 @@
 
 Open-source **Aladdin-class trading system** — India (NSE/BSE/MCX via OpenAlgo) + international **forex & crypto CFDs via MT5** — built spec-first by AI agents with hard test gates.
 
-> ⚠️ **Not live-trading ready.** Waves 0–2 of 8 complete. Paper-trade gates, SEBI compliance checks, and the exit engine must pass before any capital — see `docs/MASTER_BUILD_SPEC_V2.md` §12 (safety rules) and `progress.md` (current state).
+> ⚠️ **Not live-trading ready.** All modules are code-complete and tested, but the wall-clock gates (2-week paper trading, EOD reconciliation streak), VPS deployment, vendor-API verification, ML training runs, and SEBI registration remain — see `progress.md` for the honest deploy list and `docs/MASTER_BUILD_SPEC_V2.md` §12 for the safety rules that gate live capital.
 
 ## Status
 
 | | |
 |---|---|
-| Tests | **88 passed / 0 failed** · 94% coverage |
-| Waves | 0 ✅ Scaffold · 1 ✅ Safety Core · 2 ✅ Execution Spine · 3–7 pending |
-| Modules | 9 / 42 complete |
+| Tests | **200 passed / 0 failed** |
+| Waves | all 8 build waves complete ✅ |
+| Modules | 44 / 45 code-complete + tested (M45 cockpit SPA = scaffold; backend gateway done) |
+| Remaining | deploy-time work only — see `progress.md` (VPS infra, vendor glue verification, ML training runs, paper-trade gates, SEBI registration) |
 
 **What's proven so far (by tests, not promises):**
 - Kill switch is **fail-closed** — Redis down ⇒ halted; dual-flag sentinel survives flag loss; chaos-tested mid-cancel failures

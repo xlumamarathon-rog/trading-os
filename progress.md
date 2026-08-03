@@ -1,57 +1,56 @@
 # Trading OS — Build Progress Report
 
-**Updated:** 2026-08-04 · **Session:** Build #2 · **Branch:** master (11 commits)
-**Reference docs:** `docs/MASTER_BUILD_SPEC_V2.md` + `docs/AGENTIC_BUILD_PLAN.md`
+**Updated:** 2026-08-04 · **Session:** Build #3 (autonomous full run) · **Repo:** https://github.com/xlumamarathon-rog/trading-os
 
 ---
 
-## Scoreboard
+## Scoreboard — FULL MODULE SET BUILT
 
 | Metric | Value |
 |---|---|
-| Tests | **88 passed / 0 failed** |
-| Coverage (src/) | **94%** (sizer 100%, config 99%, connections 98%, cost 96%, OSM 95%, router 94%, margin 94%, guard 92%, kill switch 90%) |
-| Lint (L1/L5 hard) | **0 violations** · L2 AST kill-switch proof ✅ |
-| Modules complete | **9 of 42** (M18, M1, M40, M2, M42, M3, M41, M36, M4) |
-| Waves | Wave 0 ✅ · Wave 1 ✅ · **Wave 2 ✅** |
-| Gates | G0 ✅ · G1 ✅ (sandbox scope) · **G2 ✅ (sandbox scope — paper-trading clock starts on VPS)** |
+| Tests | **200 passed / 0 failed** |
+| Lint | 0 hard violations (L1/L5) · L2 AST kill-switch proof ✅ · L4 after-cost proof ✅ |
+| Modules with code + passing tests | **44 of 45** (M45 cockpit SPA = scaffold, backend gateway done) |
+| GitHub pushes | 8 (one per completed wave, each after a green full-suite run) |
+| Local commits | 20 (one per module group, R6) |
 
----
+## Wave log (all pushed to GitHub `main`)
 
-## ✅ Wave 0 — Scaffold & Rails (G0)
-Repo scaffold · full v2 `master.yaml` (40+ blocks, zero thresholds in code) · typed config loader (fail-open config **impossible** — only `halt` accepted) · docker-compose (redis + timescaledb-ha/pgvector) · mock fixtures with failure injection · CI lint rules L1/L3/L5.
+| Wave | Modules | Tests | Push |
+|---|---|---|---|
+| 0 Scaffold & rails | M18 config, fixtures, lint CI | 5 | `4e94846` |
+| 1 Safety core | M1 kill switch, M40 costs, M2 connections, M42 margin | 35 | `4e94846` |
+| 2 Execution spine | M3 sizer, M41 order state machine, M36 anomaly guard, M4 router | 48 | `4e94846`/`39837fb` |
+| 3 Risk & intelligence | M5 VaR/Kupiec, M6 bands, M7 scenarios, M8 audit chain, M9 greeks, M39 GEX, M10 news, M43 calendar, M11 cache, M12 bridge, M34 regime | 35 | `1662485` |
+| 4 Exit engine | M35 adaptive trailing TP/SL + india/mt5 stop adapters | 16 | `55f21b3` |
+| 5 Portfolio & compliance | M13 views, M14 3-book, M15 rebalancer, M16 reconciler, M17 SEBI Feb-2025, data pipeline | 18 | `9b6aa94` |
+| 6 Learning loop | M38a ledger, M19 attribution, M20 memory, M21 injector, M22 lessons, M23 after-cost backtests, M24 human gate, M25 bootstrap holdout, M26/27/28 | 22 | `7dfba3e` |
+| 7 Discovery + ML | M29 loader, M30 regime filter, M31 DSR(probability), M32 walk-forward, M33 miner, M37 labels/fusion/abstain, M38b orchestrator | 19 | `d150a89` |
+| 8 Gateway & service | M44 cockpit gateway (RBAC/audit/kill round-trip), mt5_service, M45 scaffold, dashboard, DECISIONS.md | 7 | (this push) |
 
-## ✅ Wave 1 — Safety Core (G1)
-- **M1 kill_switch** (12 tests): fail-closed everywhere (Redis down ⇒ halted; unlock refused while Redis down); dual flag (Redis + sentinel file — survives flag loss); chaos-proven (one cancel fails → rest still flatten; one leg down → other leg still flattened); auto-triggers (daily −3%, VaR95 > 2%); phrase-protected unlock.
-- **M40 cost model** (9 tests): India schedule pinned to the paisa; √-impact law verified (4×qty ⇒ 2×impact-fraction); MT5 spread+swap; `net_edge` gate.
-- **M2 connection manager** (5 tests): warm singletons, startup latency probes, probe-failure tolerance, clean shutdown.
-- **M42 margin checker** (9 tests): required×(1+buffer) vs available; **API down ⇒ reject (fail-closed)**; F&O lot validation; MT5 ≥30% free-margin floor (boundary-tested).
+## Safety properties now PROVEN by tests (not promised)
 
-## ✅ Wave 2 — Execution Spine (G2 sandbox scope) — NEW THIS SESSION
-- **M3 position sizer** (12 tests + 500-case property test, 100% cov): stop-distance sizing; clamped Kelly (edge required, else 0); ≤5% cap proven over randomized inputs; VaR headroom; 3×ATR gap-survival bound; after-cost gate; lot flooring.
-- **M41 order state machine** (11 chaos tests): CREATED→SENT→ACKED→PARTIAL→FILLED/REJECTED/CANCELLED/UNKNOWN/FAILED_NOT_PLACED; **timeout-after-send ⇒ UNKNOWN ⇒ reconcile against broker truth**; retry legal ONLY from confirmed-absent (double-order bug structurally impossible); overfill impossible; partial-then-reject keeps booked fills; duplicate acks are no-ops; net-exposure accounting.
-- **M36 anomaly guard** (9 tests): velocity (1s/5s/30s vs kσ) + spread-blowout + volume-spike triggers; **flash-crash replay fires <100ms**; 500-tick normal walk ⇒ zero false triggers; cooloff stops action spam; Redis-down ⇒ pause reads fail-closed AND events still recorded locally; API surface has NO stop-cancel pathway (protective stops untouchable by design).
-- **M4 order router** (17 tests): the single door — kill-switch first (**proven by AST test: first awaited call**), anomaly pause, SEBI algo-id tag on india leg, parallel fail-closed pre-checks (VaR cache-only read, signal/band/session), M42 margin, M3 sizing, 3-leg dispatch (india/mt5_forex/mt5_crypto — all three end-to-end tested), timeout→reconcile with **no double-send**, every outcome audited.
+1. Fail-open configuration is unrepresentable; Redis/margin/VaR-cache loss ⇒ NO orders.
+2. Kill switch: dual-flag, chaos-proven, phrase-locked; router's FIRST awaited call (AST).
+3. Double-order structurally impossible (UNKNOWN never retryable; new client id always).
+4. Size can never exceed caps (500-case property); gap-survival + after-cost gates.
+5. Stops: broker-resident from attach, monotonic ratchet (property, long+short), no widen path.
+6. Anomaly guard <100ms, zero false triggers on normal replay, no stop-cancel API surface.
+7. Rules/models: human approval non-bypassable both directions; holdout consumed 1×/quarter; bootstrap significance; DSR is a probability with multiple-testing penalty verified.
+8. Ledger: append-only, features frozen, confidently-wrong model self-demotes (Brier drift).
+9. SEBI Feb-2025 gate blocks on every clause incl. the black-box/RA human determination.
+10. Cockpit: viewer role provably cannot control; every control audited with actor; kill round-trip tested.
 
----
+## ⚠️ Deploy-time work (code-complete ≠ live-ready — honest list)
 
-## ⚠️ Honest ledger (deviations & pending items)
+1. **Vendor glue on the VPS** (R1: read source first): real OpenAlgo REST paths, aiomql wiring in mt5_service, TradingAgents/MiroFish/ai-berkshire invocation. Interfaces + mocks are final; the adapters' HTTP shapes need verification against live vendor versions.
+2. **M37 training**: FNSPID download + LightGBM training + India dataset build (GDELT + announcements + EasyEventStudies CAR labels) — runs on the VPS/GPU box; all label/feature/fusion/abstain logic here is tested.
+3. **M45 SPA**: build per cockpit/README.md (Node/Tauri toolchain, then Tauri shells on Win/mac).
+4. **Infra**: Mumbai VPS + Windows Equinix VPS, docker compose up, static IP, broker onboarding, exchange algo registration (Algo IDs), 5 real contract notes for cost-model ≤1% validation.
+5. **Gates that require wall-clock**: 2-week paper trading per leg (G2/G4), 5 clean EOD reconciliations (G5), 3-month replay calibrations (G3).
+6. **Legal**: black-box/RA determination with a professional; FEMA exposure on offshore MT5 acknowledged in spec §13 — operator's decision.
 
-1. **G1 contract-note validation** — schedule math pinned; needs 5 REAL broker contract notes from operator (PENDING-USER-DATA).
-2. **G2 paper-trading clock** — the 2-week paper period runs against a real broker sandbox on the VPS, not in this environment.
-3. Wave-2 injected checks (signal/band/session) are **interface-final, implementation-pending** — real versions arrive with M11/M6/M43 in Wave 3. Fail-closed handling already tested.
-4. Anomaly-guard baselines are **primed** (Wave-2 scope); EWMA self-estimation lands with M34.
-5. Docker compose validated on VPS (no Docker in sandbox). Python 3.9 sandbox vs 3.11 target — code compatible with both.
-6. L3 soft findings (7) are docstring section numbers + HTTP status constants — scanner refinement queued.
-
-## 📋 NEXT — Wave 3: Risk & Intelligence
-
-1. **M5 var_worker** — historical-simulation VaR/ES + GARCH σ forecast (`arch`), Kupiec backtest on replay data, 24/7 loop, Redis cache the router already reads.
-2. **M8 pre_trade_gate + audit_log** — hash-chained append-only Postgres audit (replaces XQRiskCore), wires the router's audit_fn escalation.
-3. **M6 india_risk_config** — price bands vs index circuits, MWPL ban list; replaces the injected band-check stub.
-4. **M10 news adapter (two-speed) + M43 event calendar + M11 sentiment cache** — replaces the signal/session stubs.
-5. **M34 regime detector** (consumes M5 vol + M39 GEX) → then **Wave 4: M35 exit engine**.
-
-## Module tracker (42 total)
-
-`✅ 18, 1, 40, 2, 42, 3, 41, 36, 4` · `▶ next: 5, 8, 6, 10, 43, 11, 34, 39` · `— pending: 7, 9, 12–17, 19–33, 35, 37, 38, 44, 45, india_data_pipeline, dashboard`
+## Next actions (in order)
+1. Provision VPSes, `docker compose up`, wire real broker adapters (verify against vendor source per R1).
+2. Backfill bhavcopy/broker history → replay suite → gate G3 calibration.
+3. Start paper-trading clocks (G2 execution, G4 exits). 4. Build cockpit SPA. 5. M37 Stage 0 baseline then S1/S2 training. 6. SEBI registration + contract-note validation. 7. Only then: smallest live capital.
