@@ -10,6 +10,7 @@ broker:
     api_secret: ${INDIA_BROKER_SECRET}
     base_url: http://127.0.0.1:5000   # OpenAlgo on same VPS (latency plan)
     static_ip_confirmed: false        # deployment gate — must be true before live
+    default_exchange: NSE             # OpenAlgo exchange field (verified schema)
     max_orders_per_sec: 10
   mt5:
     login: ${MT5_LOGIN}

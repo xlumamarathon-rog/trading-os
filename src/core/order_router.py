@@ -223,15 +223,31 @@ class OrderRouter:
         client: httpx.AsyncClient = (
             self.connections.get_openalgo() if record.leg == "india" else self.connections.get_mt5()
         )
-        path = "/api/v1/placeorder" if record.leg == "india" else "/order"
-        payload = {
-            "client_order_id": record.client_order_id,
-            "symbol": record.symbol,
-            "direction": record.direction,
-            "qty": record.requested_qty,
-            "algo_id": req.algo_id,
-            "product": req.product,
-        }
+        if record.leg == "india":
+            # Schema verified against vendor/openalgo restx_api source (R1).
+            from src.core.broker_payloads import openalgo_order_payload
+
+            broker_cfg = self.cfg.model_extra["broker"]["india"]
+            path = "/api/v1/placeorder"
+            payload = openalgo_order_payload(
+                apikey=broker_cfg.get("api_key", ""),
+                algo_id=req.algo_id or "",
+                exchange=broker_cfg.get("default_exchange", "NSE"),
+                symbol=record.symbol,
+                action=record.direction,
+                quantity=record.requested_qty,
+                product="CNC" if req.product == "delivery" else "MIS",
+            )
+        else:
+            path = "/order"
+            payload = {
+                "client_order_id": record.client_order_id,
+                "symbol": record.symbol,
+                "direction": record.direction,
+                "qty": record.requested_qty,
+                "algo_id": req.algo_id,
+                "product": req.product,
+            }
         self.osm.mark_sent(record)
         try:
             resp = await client.post(path, json=payload)
@@ -249,7 +265,8 @@ class OrderRouter:
             return RouteResult(False, f"broker_rejected:http_{resp.status_code}", record)
 
         data = resp.json()
-        self.osm.on_ack(record, str(data.get("broker_order_id", "")))
+        # OpenAlgo returns "orderid"; our mt5_service returns "broker_order_id"
+        self.osm.on_ack(record, str(data.get("orderid") or data.get("broker_order_id", "")))
         filled = float(data.get("filled_qty", 0.0))
         if filled > 0:
             self.osm.on_fill(record, filled, float(data.get("avg_price", req.entry)))

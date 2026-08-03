@@ -27,3 +27,9 @@
 12. **Sandbox constraints recorded**: Python 3.9 compatible (target 3.11),
     docker compose validated on VPS, real broker contract notes pending for
     the ≤1% cost-model validation, 2-week paper gates run on the VPS.
+13. **R1 vendor verification (post-build audit)**: OpenAlgo's real schema differed
+    from the mocked one (action/quantity/apikey/strategy vs direction/qty) — router
+    dispatch + india stop adapter rewritten against vendor source; payload builders
+    unit-tested; TradingAgents entry point confirmed as
+    TradingAgentsGraph.propagate(company_name, trade_date); GARCH path live-verified
+    with the real arch library. Mocks updated to mirror real response field (orderid).

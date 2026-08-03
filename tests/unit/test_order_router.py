@@ -41,9 +41,13 @@ class BrokerEndpoint:
                     import json as _json
 
                     body = _json.loads(request.content.decode())
+                    # OpenAlgo schema uses "quantity" and responds "orderid";
+                    # our mt5_service uses "qty" and responds "broker_order_id".
+                    qty = body.get("quantity", body.get("qty"))
                     return httpx.Response(
                         200,
-                        json={"broker_order_id": "B1", "filled_qty": body["qty"], "avg_price": 100.0},
+                        json={"orderid": "B1", "broker_order_id": "B1",
+                              "filled_qty": qty, "avg_price": 100.0},
                     )
                 if self.behavior == "reject":
                     return httpx.Response(400, json={"error": "price band"})
