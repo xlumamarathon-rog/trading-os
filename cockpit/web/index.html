@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trading OS — Cockpit</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">TRADING<span>OS</span></div>
+  <div id="mode-badge" class="badge paper">PAPER</div>
+  <div id="halt-banner" class="halt-banner hidden">⛔ TRADING HALTED — kill switch active</div>
+  <div class="auth">
+    <input id="token" type="password" placeholder="access token" autocomplete="off">
+    <span id="role" class="role">—</span>
+  </div>
+</header>
+
+<main>
+  <!-- row 1: vitals -->
+  <section class="cards">
+    <div class="card"><h3>Equity</h3><div id="equity" class="big">—</div>
+      <canvas id="spark" width="220" height="46"></canvas></div>
+    <div class="card"><h3>Day P&amp;L</h3><div id="pnl" class="big">—</div>
+      <div id="costs" class="sub">costs —</div></div>
+    <div class="card"><h3>VaR 95 vs limit</h3>
+      <div class="gauge"><div id="var-fill" class="gauge-fill"></div></div>
+      <div id="var-label" class="sub">—</div></div>
+    <div class="card"><h3>Workers</h3><div id="workers" class="workers">—</div></div>
+  </section>
+
+  <!-- row 2: kill switch + unlock -->
+  <section class="control-row">
+    <div class="card danger-card">
+      <h3>Emergency</h3>
+      <button id="kill-btn" class="kill" disabled>KILL SWITCH</button>
+      <div id="kill-confirm" class="hidden">
+        <p>Type <code>KILL ALL POSITIONS</code> to confirm:</p>
+        <input id="kill-phrase" autocomplete="off" placeholder="confirmation phrase">
+        <input id="kill-reason" autocomplete="off" placeholder="reason (logged)">
+        <button id="kill-go" class="kill small">CONFIRM KILL</button>
+        <button id="kill-cancel" class="ghost small">cancel</button>
+      </div>
+      <div id="unlock-panel" class="hidden">
+        <p>System halted. Enter unlock phrase:</p>
+        <input id="unlock-phrase" type="password" autocomplete="off">
+        <button id="unlock-go" class="ghost small">UNLOCK</button>
+      </div>
+    </div>
+    <div class="card grow">
+      <h3>Approvals inbox <span class="sub">(rules &amp; model promotions — human gate)</span></h3>
+      <div id="approvals" class="list">—</div>
+    </div>
+  </section>
+
+  <!-- row 3: positions -->
+  <section class="card">
+    <h3>Open positions · exit states</h3>
+    <table id="positions">
+      <thead><tr><th>Symbol</th><th>Leg</th><th>Qty</th><th>Entry</th><th>Stop</th>
+        <th>R now</th><th>State</th><th>MFE</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- row 4: events -->
+  <section class="card">
+    <h3>Event feed <span class="sub">(anomalies · regime shifts · audit)</span></h3>
+    <div id="events" class="list mono"></div>
+  </section>
+</main>
+
+<footer>
+  <span id="conn" class="conn">connecting…</span>
+  <span class="sub">viewer sees state · operator controls · every control audited (spec §12.11)</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

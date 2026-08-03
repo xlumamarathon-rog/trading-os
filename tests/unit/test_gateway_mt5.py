@@ -140,3 +140,26 @@ async def test_mt5_stop_endpoints_match_m35_adapter_contract():
         assert (await c.post("/position/modify", json={"position_id": "POS-9", "sl": 59000})).status_code == 200
         assert fake.last_modify == ("POS-9", 59000)
         assert (await c.post("/position/close", json={"symbol": "BTCUSD", "lots": 0.5})).status_code == 200
+
+
+# ---------- M45 web UI serving ----------
+
+async def test_gateway_serves_cockpit_ui(tmp_path):
+    app, _, _ = make_app(tmp_path)
+    async with client_for(app) as c:                       # UI shell needs no token
+        index = await c.get("/ui")
+        assert index.status_code == 200 and b"TRADING" in index.content
+        js = await c.get("/ui/app.js")
+        css = await c.get("/ui/style.css")
+        assert js.status_code == 200 and b"KILL ALL POSITIONS" in js.content
+        assert css.status_code == 200
+        evil = await c.get("/ui/..%2F..%2F.env")           # traversal blocked
+        assert evil.status_code in (400, 404)
+        assert (await c.get("/state")).status_code == 401  # data still auth-gated
+
+
+async def test_ui_contains_no_order_logic_markers(tmp_path):
+    """Spec §12.11 canary: the SPA renders + sends intents, never sizes/places."""
+    js = open("cockpit/web/app.js").read()
+    for forbidden in ("placeorder", "position_size", "kelly", "order_router"):
+        assert forbidden not in js

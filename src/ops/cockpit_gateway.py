@@ -11,9 +11,11 @@ snapshot provider (deltas on the VPS deployment).
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Callable, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 
@@ -31,8 +33,24 @@ def create_gateway(
     pause_entries_fn: Optional[Callable] = None,
     approvals_fn: Optional[Callable] = None,   # -> list of pending approvals
     approve_fn: Optional[Callable] = None,     # (approval_id, actor) -> None
+    ui_dir: Optional[str] = "cockpit/web",     # M45 SPA (zero-build, static)
 ) -> FastAPI:
     app = FastAPI(title="Trading OS Cockpit Gateway", docs_url=None, redoc_url=None)
+
+    # ---------- M45 web UI (public shell; every DATA/CONTROL call inside it
+    # still requires the Bearer token) ----------
+    ui_path = Path(ui_dir) if ui_dir else None
+    if ui_path is not None and ui_path.exists():
+        @app.get("/ui")
+        async def ui_index():
+            return FileResponse(ui_path / "index.html")
+
+        @app.get("/ui/{asset}")
+        async def ui_asset(asset: str):
+            target = (ui_path / asset).resolve()
+            if not str(target).startswith(str(ui_path.resolve())) or not target.is_file():
+                raise HTTPException(status_code=404)
+            return FileResponse(target)
 
     def authed(authorization: str = Header(default="")) -> dict:
         token = authorization.removeprefix("Bearer ").strip()
