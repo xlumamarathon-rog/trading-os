@@ -4,15 +4,27 @@
 
 ---
 
-## Scoreboard — FULL MODULE SET BUILT
+## Scoreboard — FULL MODULE SET BUILT + REAL UI
 
 | Metric | Value |
 |---|---|
-| Tests | **221 passed / 0 failed** (incl. full end-to-end paper lifecycle) |
+| Python tests | **234 passed / 0 failed** (unit + chaos + end-to-end paper lifecycle + vendor canaries) |
+| Next.js cockpit | `next build` clean (7 routes, types valid) · **smoke 12/12** incl. Playwright render (28 chart canvases, 0 console errors) |
 | Lint | 0 hard violations (L1/L5) · L2 AST kill-switch proof ✅ · L4 after-cost proof ✅ |
-| Modules with code + passing tests | **44 of 45** (M45 cockpit SPA = scaffold, backend gateway done) |
-| GitHub pushes | 8 (one per completed wave, each after a green full-suite run) |
-| Local commits | 20 (one per module group, R6) |
+| Modules with code + passing tests | **45 of 45** (M45 = full Next.js cockpit, verified rendering) |
+| GitHub pushes | 15 (wave-by-wave, each after a green run) |
+
+## Wave 10 — REAL WEB UI (this session)
+
+| Piece | Status |
+|---|---|
+| **Next.js 15 + React 19 + TS cockpit** (`cockpit-next/`) — equity area chart, per-symbol candlesticks (3 legs), VaR gauge, dealer-gamma (GEX) heatmap, live exit-state positions table, kill-switch panel (typed-phrase confirm) + unlock, approvals inbox, worker-health chips, event feed, live-gate progress | ✅ built + rendered |
+| **lightweight-charts** integration — 28 chart canvases render, zero console errors (Playwright-verified) | ✅ |
+| **Demo mode** — `/api/demo/*` mock market so the UI runs standalone; real mode via `NEXT_PUBLIC_GATEWAY_URL` | ✅ |
+| **§12.11 client-safety** — zero order logic client-side; renders state + sends authenticated intents only | ✅ canary |
+| **smoke.mjs** — reusable UI test: routes + control contract + browser render, 12/12 | ✅ |
+| Bugs found + fixed this session | test-regex case-sensitivity vs CSS uppercase (test bug, not app); broad `pkill` killing sandbox tooling (harness, not app). App itself: 0 runtime errors, 0 NaN over 60-request hammer. |
+| Prior vanilla SPA (`cockpit/web/`) | retained — zero-build fallback served by the gateway at `/ui` |
 
 ## Wave 9 — PRODUCTION READINESS (this session)
 
