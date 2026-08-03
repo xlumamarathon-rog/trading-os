@@ -1,0 +1,19 @@
+# systemd unit — Linux core VPS (paper first; change --mode live ONLY after the gate)
+[Unit]
+Description=Trading OS runtime
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/trading-os
+EnvironmentFile=/opt/trading-os/.env
+ExecStart=/usr/bin/python3 -m src.app --mode paper
+Restart=on-failure
+RestartSec=5
+# hard stop => kill switch sentinel remains; a restart boots into the same halt state
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

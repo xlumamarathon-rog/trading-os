@@ -33,6 +33,7 @@ def create_gateway(
     pause_entries_fn: Optional[Callable] = None,
     approvals_fn: Optional[Callable] = None,   # -> list of pending approvals
     approve_fn: Optional[Callable] = None,     # (approval_id, actor) -> None
+    resume_entries_fn: Optional[Callable] = None,  # (actor) -> None — safe-start release
     ui_dir: Optional[str] = "cockpit/web",     # M45 SPA (zero-build, static)
 ) -> FastAPI:
     app = FastAPI(title="Trading OS Cockpit Gateway", docs_url=None, redoc_url=None)
@@ -114,6 +115,15 @@ def create_gateway(
         await pause_entries_fn(req.reason or "cockpit manual pause")
         await _audit(actor, "pause_entries", {"reason": req.reason})
         return {"paused": True}
+
+    @app.post("/control/resume_entries")
+    async def resume(req: ControlRequest, actor: dict = Depends(operator_only)):
+        """Safe-start release: a fresh LIVE process trades only after this click."""
+        if resume_entries_fn is None:
+            raise HTTPException(status_code=501, detail="not wired")
+        await resume_entries_fn(actor["token_tail"])
+        await _audit(actor, "resume_entries", {"reason": req.reason})
+        return {"entries_resumed": True}
 
     @app.post("/control/approve/{approval_id}")
     async def approve(approval_id: str, req: ControlRequest,

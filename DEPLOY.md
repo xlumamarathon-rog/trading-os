@@ -52,10 +52,18 @@
 
 ## Phase C — Live (only after B; start at minimum size)
 
-7. `python -m src.app --mode live` — starts ONLY if every gate above passes.
+7. **Pre-flight:** `python3 scripts/go_live_check.py` — one command, PASS/FAIL table over
+   every automated clause (config, secrets, tests, lint, gate evidence, audit chain).
+   It cannot be green until the three human items are done — by design.
+8. `python -m src.app --mode live` — starts ONLY if the gate passes, and boots
+   **SAFE-STARTED**: entries are PAUSED until an operator clicks *Resume entries* in the
+   cockpit (`POST /control/resume_entries`, audited). A fresh live process never trades on its own.
+9. **Live ramp (code-enforced):** for the first `live_ramp.days` (default 5) live days,
+   position size is capped at `live_ramp.max_position_pct` (default 1% vs the normal 5%).
+   The EOD worker advances `live_days_completed` only on CLEAN reconciliation days.
 8. First live week: minimum lot sizes, kill-switch drill on day 1 (trigger + unlock via
    cockpit), verify contract notes against MODULE 40 within 1% (5 real notes).
-9. Scale only after a clean live week AND the rule/model approval discipline (M24/M38)
+12. Scale only after a clean live week AND the rule/model approval discipline (M24/M38)
    has been exercised at least once end-to-end.
 
 ## Operations reference

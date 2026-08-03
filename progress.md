@@ -14,7 +14,22 @@
 | Modules with code + passing tests | **45 of 45** (M45 = full Next.js cockpit, verified rendering) |
 | GitHub pushes | 15 (wave-by-wave, each after a green run) |
 
-## Wave 11 — REAL-MARKET PAPER REPLAY (this session)
+## Wave 12 — LIVE-TRADING READINESS (this session)
+
+| Piece | Status |
+|---|---|
+| **Runtime assembly** (`src/runtime.py`) — ONE `build_runtime(cfg, mode)` constructs the whole graph for paper OR live; live passes the evidence gate first (no bypass) | ✅ tested |
+| **SAFE-START** — a fresh live process boots with entries PAUSED; trades only after operator `POST /control/resume_entries` (new gateway endpoint, audited) | ✅ tested |
+| **LIVE RAMP (code-enforced)** — first 5 live days capped at 1% position size (vs 5%); `live_days_completed` advances only on CLEAN recon days via the EOD worker | ✅ tested |
+| **Tick feed worker** — injected stream → guard → exit sub-bars → snapshot candles, heartbeats (R9) | ✅ tested |
+| **EOD worker** — reconcile → daily report → gate advance → alert, automated daily ritual | ✅ tested |
+| **Snapshot ⇄ UI contract canary** — gateway snapshot builder field-for-field matched against `cockpit-next/lib/types.ts` (Python and TypeScript cannot drift silently) | ✅ tested |
+| **`scripts/go_live_check.py`** — operator pre-flight: config/secrets/tests/lint/gate/audit-chain PASS-FAIL table; demonstrably green on all automated clauses, blocked only on the 3 human items | ✅ demonstrated |
+| **deploy/** — systemd units for runtime + cockpit | ✅ |
+
+**Definition of done for LIVE (final):** everything automated is green (244 paper days, streak 244, audit chain intact, 243 tests). Remaining are exactly the three items that MUST be human: (1) SEBI Feb-2025 registration + black-box/RA determination, (2) broker static IP + config flag, (3) the signed ack phrase. Plus deploy-side: VPS provisioning, broker API keys in .env, real-broker-feed verification per R1.
+
+## Wave 11 — REAL-MARKET PAPER REPLAY (prior)
 
 | Evidence | Value |
 |---|---|

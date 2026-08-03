@@ -1,0 +1,13 @@
+# systemd unit — Next.js cockpit (behind TLS reverse proxy)
+[Unit]
+Description=Trading OS Cockpit UI
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/trading-os/cockpit-next
+Environment=NEXT_PUBLIC_GATEWAY_URL=https://127.0.0.1:8443
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
