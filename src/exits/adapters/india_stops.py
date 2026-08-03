@@ -29,6 +29,16 @@ class IndiaStopAdapter:
             apikey=self.apikey, orderid=stop_order_id, trigger_price=new_price))
         resp.raise_for_status()
 
+    async def cancel_stop(self, stop_order_id: str, leg: str) -> None:
+        resp = await self.client.post("/api/v1/cancelorder", json={
+            "apikey": self.apikey, "orderid": stop_order_id})
+        resp.raise_for_status()
+
+    async def replace_stop(self, old_id: str, symbol: str, qty: float,
+                           trigger_price: float, leg: str) -> str:
+        await self.cancel_stop(old_id, leg)
+        return await self.place_stop(symbol, qty, trigger_price, leg)
+
     async def exit_market(self, symbol: str, qty: float, leg: str) -> None:
         resp = await self.client.post("/api/v1/placeorder", json=openalgo_order_payload(
             apikey=self.apikey, algo_id=self.algo_id, exchange=self.exchange,

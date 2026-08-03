@@ -19,6 +19,7 @@ SHOCK = {"trend_state": "RANGE", "vol_regime": "SHOCK"}
 class MockStopAdapter:
     def __init__(self):
         self.placed, self.modified, self.exits = [], [], []
+        self.cancelled, self.replaced = [], []
 
     async def place_stop(self, symbol, qty, stop_price, leg):
         self.placed.append((symbol, qty, stop_price, leg))
@@ -26,6 +27,13 @@ class MockStopAdapter:
 
     async def modify_stop(self, stop_order_id, new_price, leg):
         self.modified.append((stop_order_id, new_price))
+
+    async def cancel_stop(self, stop_order_id, leg):
+        self.cancelled.append(stop_order_id)
+
+    async def replace_stop(self, old_id, symbol, qty, trigger, leg):
+        self.replaced.append((old_id, qty, trigger))
+        return f"STOP-R{len(self.replaced)}"
 
     async def exit_market(self, symbol, qty, leg):
         self.exits.append((symbol, qty))
@@ -119,7 +127,7 @@ async def test_partial2_and_trailing_at_2r():
     await mgr.on_bar("X", 106.5, 105.0, 106.2, TREND)
     assert pos.state == "TRAILING"
     assert [p[2] for p in partials] == [1.0, 2.0]
-    assert pos.remaining_qty == pytest.approx(100 * (1 - 0.33 - 0.33))
+    assert pos.remaining_qty == pytest.approx(34)      # lot-floored: 33 + 33 sold
 
 
 async def test_chandelier_follows_extreme_with_regime_k():
@@ -195,7 +203,10 @@ async def test_stop_hit_exit_with_mfe_telemetry():
     t = pos.telemetry
     assert t.exit_reason == "stop_hit" and t.exit_price == pytest.approx(100.0)
     assert t.mfe_r > 1.0 and 0 <= t.mfe_captured_pct <= 100
-    assert adapter.exits and exits
+    # partials produced exits; stop_hit itself must NOT add a market sell (no double-exit)
+    partial_sells = len([p for p in pos.partials_taken])
+    assert len(adapter.exits) == partial_sells
+    assert exits
 
 
 async def test_min_ratchet_step_batches_modifies():

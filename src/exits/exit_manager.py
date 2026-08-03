@@ -20,9 +20,12 @@ INVARIANTS (code-enforced, property-tested):
 """
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class StopWidenAttempt(RuntimeError):
@@ -54,6 +57,7 @@ class ManagedPosition:
     bars_no_progress: int = 0
     partials_taken: list = field(default_factory=list)
     remaining_qty: float = 0.0
+    lot_size: float = 1.0
     opened_at: float = field(default_factory=time.time)
     telemetry: Optional[ExitTelemetry] = None
 
@@ -74,8 +78,9 @@ class ExitManager:
     # ---------- attach (stop resident at broker immediately) ----------
 
     async def attach(self, *, symbol: str, direction: str, entry: float, qty: float,
-                     atr: float, leg: str, structure_stop: Optional[float] = None) -> ManagedPosition:
-        if entry <= 0 or qty <= 0 or atr <= 0:
+                     atr: float, leg: str, structure_stop: Optional[float] = None,
+                     lot_size: float = 1.0) -> ManagedPosition:
+        if entry <= 0 or qty <= 0 or atr <= 0 or lot_size <= 0:
             raise ValueError("invalid attach inputs")
         k_sl = float(self.cfg["k_sl_initial"][leg])
         dist = k_sl * atr
@@ -87,7 +92,7 @@ class ExitManager:
         pos = ManagedPosition(
             symbol=symbol, direction=direction, entry=entry, qty=qty, atr=atr, leg=leg,
             stop=stop, r_value=abs(entry - stop), stop_order_id=stop_order_id,
-            extreme=entry, remaining_qty=qty,
+            extreme=entry, remaining_qty=qty, lot_size=lot_size,
         )
         self.positions[symbol] = pos
         return pos
@@ -135,9 +140,19 @@ class ExitManager:
         return k
 
     async def _take_partial(self, pos: ManagedPosition, at_r: float, pct: float, price: float) -> None:
-        qty = pos.qty * pct / 100.0
-        pos.remaining_qty = max(0.0, pos.remaining_qty - qty)
+        """Partials are REAL broker orders: lot-floored, executed via the adapter,
+        and the resting stop is re-placed for the remaining quantity."""
+        lot = getattr(pos, "lot_size", 1.0)
+        import math as _math
+        qty = _math.floor((pos.qty * pct / 100.0) / lot) * lot
         pos.partials_taken.append(at_r)
+        if qty <= 0:
+            return  # position too small to carve a lot — ladder skipped, stop still protects
+        await self.adapter.exit_market(pos.symbol, qty, pos.leg)
+        pos.remaining_qty = max(0.0, pos.remaining_qty - qty)
+        if pos.remaining_qty > 0 and hasattr(self.adapter, "replace_stop"):
+            pos.stop_order_id = await self.adapter.replace_stop(
+                pos.stop_order_id, pos.symbol, pos.remaining_qty, pos.stop, pos.leg)
         if self.on_partial:
             await self.on_partial(pos.symbol, qty, price, at_r)
 
@@ -149,7 +164,22 @@ class ExitManager:
             mfe_captured_pct=(realized_r / mfe_r * 100.0) if mfe_r > 0 else 0.0,
         )
         pos.state = "EXITED"
-        await self.adapter.exit_market(pos.symbol, pos.remaining_qty, pos.leg)
+        if reason == "stop_hit":
+            # The BROKER-resident stop already closed the remainder server-side.
+            # Selling again here would double-exit (integration-test-caught bug).
+            pass_through = True
+        else:
+            # Active exit: cancel the resting stop FIRST, then market-out.
+            if hasattr(self.adapter, "cancel_stop"):
+                try:
+                    await self.adapter.cancel_stop(pos.stop_order_id, pos.leg)
+                except Exception as exc:  # noqa: BLE001 — R5: log, still exit the position
+                    logger.error("cancel_stop failed for %s: %s", pos.symbol, exc)
+            import math as _math
+            lot = getattr(pos, "lot_size", 1.0)
+            qty = _math.floor(pos.remaining_qty / lot) * lot
+            if qty > 0:
+                await self.adapter.exit_market(pos.symbol, qty, pos.leg)
         if self.on_exit:
             await self.on_exit(pos.symbol, pos.telemetry)
 

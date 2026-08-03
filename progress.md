@@ -8,11 +8,27 @@
 
 | Metric | Value |
 |---|---|
-| Tests | **200 passed / 0 failed** |
+| Tests | **221 passed / 0 failed** (incl. full end-to-end paper lifecycle) |
 | Lint | 0 hard violations (L1/L5) · L2 AST kill-switch proof ✅ · L4 after-cost proof ✅ |
 | Modules with code + passing tests | **44 of 45** (M45 cockpit SPA = scaffold, backend gateway done) |
 | GitHub pushes | 8 (one per completed wave, each after a green full-suite run) |
 | Local commits | 20 (one per module group, R6) |
+
+## Wave 9 — PRODUCTION READINESS (this session)
+
+| Piece | Status |
+|---|---|
+| **Paper broker engine** — fills w/ √-impact slippage + full India cost schedule, resting SL-M triggered by ticks, margin, books | ✅ tested |
+| **Paper server** — PaperBroker behind the EXACT verified broker schemas (OpenAlgo + mt5_service) ⇒ paper mode is a base-URL swap, zero code-path changes | ✅ tested |
+| **END-TO-END INTEGRATION TEST** — real router → paper fill (slippage+costs) → exit engine attaches real resting stop → trail ratchets INTO the broker → crash triggers broker-side stop → reconciliation CLEAN → daily report + gate advance | ✅ 3 tests |
+| **Bugs the integration test caught** — fractional partial quantities (NSE rejects) and stop-hit double-sell — both fixed: lot-floored partials as real orders, stop re-placed for remainder, stop_hit never market-exits again | ✅ fixed + retested |
+| **src/app.py runtime** — WorkerSupervisor (restart-on-crash ≤5, heartbeats R9, give-up alert, graceful shutdown) | ✅ tested |
+| **LIVE GATE** — live mode raises LiveGateError unless: ≥14 paper days, ≥5 clean-reconciliation streak, SEBI passed, static IP confirmed, exact human ack phrase | ✅ tested (each clause) |
+| **Durable persistence** — fsync'd hash-chained JSONL audit (reload-verified, tamper ⇒ error), ledger KV store | ✅ tested |
+| **Alerting** — Telegram adapter (fail-safe, never breaks trading path) + fanout | ✅ tested |
+| **Paper evidence loop** — daily report + gate_state.json progression (dirty day resets streak) | ✅ tested |
+| **CI** — GitHub Actions: full suite + safety lint on every push | ✅ |
+| **DEPLOY.md** — phase-gated runbook: infra → paper (evidence) → live (earned) | ✅ |
 
 ## Wave log (all pushed to GitHub `main`)
 

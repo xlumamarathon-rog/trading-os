@@ -17,6 +17,20 @@ class Mt5StopAdapter:
             "position_id": stop_order_id, "sl": new_price})
         resp.raise_for_status()
 
+    async def cancel_stop(self, stop_order_id: str, leg: str) -> None:
+        # MT5 SL rides the position; clearing = modify sl to 0 (broker semantics)
+        resp = await self.client.post("/position/modify", json={
+            "position_id": stop_order_id, "sl": 0})
+        resp.raise_for_status()
+
+    async def replace_stop(self, old_id: str, symbol: str, qty: float,
+                           trigger_price: float, leg: str) -> str:
+        # Position-level SL persists across partial closes — same id remains valid.
+        resp = await self.client.post("/position/modify", json={
+            "position_id": old_id, "sl": trigger_price})
+        resp.raise_for_status()
+        return old_id
+
     async def exit_market(self, symbol: str, qty: float, leg: str) -> None:
         resp = await self.client.post("/position/close", json={"symbol": symbol, "lots": qty})
         resp.raise_for_status()
