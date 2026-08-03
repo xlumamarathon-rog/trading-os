@@ -1,0 +1,15 @@
+{
+ "date_range": [
+  "2020-02-20",
+  "2020-03-23"
+ ],
+ "description": "COVID crash: -35% Nifty drawdown",
+ "shocks": {
+  "india_equity": -0.35,
+  "global_equity": -0.3,
+  "gold": 0.05,
+  "crypto": -0.4,
+  "fx_usdinr": 0.05
+ },
+ "name": "covid_crash_2020"
+}

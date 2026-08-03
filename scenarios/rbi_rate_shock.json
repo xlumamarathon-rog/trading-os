@@ -1,0 +1,16 @@
+{
+ "date_range": [
+  "hypothetical",
+  "hypothetical"
+ ],
+ "description": "Surprise +100bps RBI hike",
+ "shocks": {
+  "india_equity": -0.06,
+  "india_financials": -0.09,
+  "global_equity": -0.01,
+  "gold": -0.02,
+  "crypto": -0.03,
+  "fx_usdinr": -0.02
+ },
+ "name": "rbi_rate_shock"
+}

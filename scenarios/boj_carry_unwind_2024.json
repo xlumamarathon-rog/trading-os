@@ -1,0 +1,15 @@
+{
+ "date_range": [
+  "2024-08-01",
+  "2024-08-06"
+ ],
+ "description": "Yen carry unwind",
+ "shocks": {
+  "india_equity": -0.04,
+  "global_equity": -0.08,
+  "gold": 0.01,
+  "crypto": -0.18,
+  "fx_usdinr": 0.01
+ },
+ "name": "boj_carry_unwind_2024"
+}

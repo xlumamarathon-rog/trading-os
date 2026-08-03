@@ -1,0 +1,16 @@
+{
+ "date_range": [
+  "2022-02-24",
+  "2022-03-31"
+ ],
+ "description": "Commodity spike, risk-off",
+ "shocks": {
+  "india_equity": -0.08,
+  "global_equity": -0.1,
+  "gold": 0.08,
+  "crypto": -0.15,
+  "fx_usdinr": 0.02,
+  "crude": 0.35
+ },
+ "name": "russia_ukraine_2022"
+}

@@ -1,0 +1,15 @@
+{
+ "date_range": [
+  "2012-10-05",
+  "2012-10-05"
+ ],
+ "description": "NSE flash crash (erroneous orders), intraday -15%",
+ "shocks": {
+  "india_equity": -0.15,
+  "global_equity": 0.0,
+  "gold": 0.0,
+  "crypto": 0.0,
+  "fx_usdinr": 0.0
+ },
+ "name": "nifty_flash_crash"
+}

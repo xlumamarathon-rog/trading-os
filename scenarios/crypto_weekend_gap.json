@@ -1,0 +1,15 @@
+{
+ "date_range": [
+  "hypothetical",
+  "hypothetical"
+ ],
+ "description": "Weekend crypto gap through stops",
+ "shocks": {
+  "india_equity": 0.0,
+  "global_equity": 0.0,
+  "gold": 0.0,
+  "crypto": -0.2,
+  "fx_usdinr": 0.0
+ },
+ "name": "crypto_weekend_gap"
+}

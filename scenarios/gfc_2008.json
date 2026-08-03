@@ -1,0 +1,15 @@
+{
+ "date_range": [
+  "2008-09-01",
+  "2009-03-09"
+ ],
+ "description": "Global financial crisis",
+ "shocks": {
+  "india_equity": -0.55,
+  "global_equity": -0.5,
+  "gold": 0.1,
+  "crypto": 0.0,
+  "fx_usdinr": 0.2
+ },
+ "name": "gfc_2008"
+}

@@ -1,0 +1,16 @@
+{
+ "date_range": [
+  "2018-09-01",
+  "2018-10-31"
+ ],
+ "description": "IL&FS default, NBFC contagion",
+ "shocks": {
+  "india_equity": -0.12,
+  "india_financials": -0.25,
+  "global_equity": -0.02,
+  "gold": 0.02,
+  "crypto": -0.05,
+  "fx_usdinr": 0.03
+ },
+ "name": "ilfs_default_2018"
+}

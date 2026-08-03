@@ -1,0 +1,15 @@
+{
+ "date_range": [
+  "2022-05-01",
+  "2022-12-31"
+ ],
+ "description": "LUNA/FTX cascade",
+ "shocks": {
+  "india_equity": -0.05,
+  "global_equity": -0.15,
+  "gold": 0.0,
+  "crypto": -0.65,
+  "fx_usdinr": 0.08
+ },
+ "name": "crypto_winter_2022"
+}
