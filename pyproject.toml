@@ -1,0 +1,14 @@
+[project]
+name = "trading-os"
+version = "0.1.0"
+description = "Trading OS — open-source Aladdin-class trading system (see docs/MASTER_BUILD_SPEC_V2.md)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["src"]

@@ -1,0 +1,142 @@
+# ============================================================
+# MODULE 18 — Master Config (spec §3). Single source of tunables.
+# Every threshold in the system lives HERE. Zero magic numbers in code.
+# ============================================================
+
+broker:
+  india:
+    provider: dhan                    # dhan | shoonya | fyers | zerodha
+    api_key: ${INDIA_BROKER_API_KEY}
+    api_secret: ${INDIA_BROKER_SECRET}
+    base_url: http://127.0.0.1:5000   # OpenAlgo on same VPS (latency plan)
+    static_ip_confirmed: false        # deployment gate — must be true before live
+    max_orders_per_sec: 10
+  mt5:
+    login: ${MT5_LOGIN}
+    password: ${MT5_PASSWORD}
+    server: ${MT5_SERVER}
+    exec_service_url: https://mt5-vps.internal:8443
+    symbol_classes:
+      forex: [EURUSD, GBPUSD, USDJPY, XAUUSD]
+      crypto_cfd: [BTCUSD, ETHUSD]
+
+risk_limits:
+  max_var_daily: 0.02
+  max_position_pct: 0.05
+  max_risk_per_trade_pct: 0.01
+  max_daily_loss_pct: 0.03
+  max_sector_exposure_pct: 0.20
+  gap_assumption_atr: 3.0             # sizing assumes stop can gap through by 3×ATR
+  kelly_cap: 0.5                      # half-Kelly hard cap on edge scaling
+  margin_buffer_india: 0.05           # require 5% headroom over broker-required margin
+  mt5_min_free_margin_pct: 0.30       # post-trade free margin must stay >= 30% of equity
+
+trading_hours:
+  india: {open: "09:15", close: "15:30", timezone: "Asia/Kolkata"}
+  forex_sessions:
+    london: ["08:00", "16:00"]
+    new_york: ["13:00", "21:00"]
+    timezone: "UTC"
+  crypto_cfd:
+    mode: continuous
+    maintenance: [{day: "Sat", from: "00:00", to: "02:00", tz: "UTC"}]
+
+execution_costs:                      # MODULE 40
+  india:
+    brokerage_flat: 20.0              # INR per executed order (discount broker)
+    stt_delivery_pct: 0.001           # 0.1% on both sides, delivery
+    stt_intraday_sell_pct: 0.00025    # 0.025% sell side only, intraday
+    exchange_txn_pct: 0.0000345       # NSE txn charge
+    stamp_duty_pct: 0.00015           # buy side only
+    gst_pct: 0.18                     # on brokerage + exchange txn
+  impact_model:
+    y_coefficient: 0.7                # square-root law: dP ≈ Y·σ·√(Q/V)
+  mt5:
+    default_spread_points: {EURUSD: 1.0, XAUUSD: 20.0, BTCUSD: 3500.0}
+
+llm:
+  provider: claude
+  model_debate: claude-sonnet-4-6
+  model_fast_classifier: claude-haiku
+
+cache_ttl:
+  sentiment_signal: 14400
+  var_snapshot: 300
+  mirofish_macro: 43200
+
+anomaly_guard:                        # MODULE 36
+  velocity_sigma: {s1: 6, s5: 5, s30: 4}
+  spread_blowout_mult: 3.0
+  volume_spike_mult: 5.0
+  index_1min_pct: 0.5
+  on_shock: {pause_entries: true, derisk_pct: 50, tighten_trail: true}
+  cooloff_minutes: 15
+
+news:                                 # MODULE 10 v2
+  hot_poll_seconds_held_symbols: 45
+  cold_poll_minutes_watchlist: 15
+  fast_classifier: {severity_pause_threshold: 7}
+  dissemination_cluster_feature: true
+
+event_calendar:                       # MODULE 43
+  sources: [rbi, fed, cpi_in, cpi_us, union_budget, earnings_held, fo_expiry]
+  pre_event_lockout_min: 30
+  post_event_resume_min: 15
+
+regime_detector:                      # MODULE 34
+  vol_lookback_days: 90
+  adx_period: 14
+  hurst_window: 200
+  gex_input: true
+
+exit_manager:                         # MODULE 35
+  breakeven_at_r: 1.0
+  partials: [{at_r: 1.0, pct: 33}, {at_r: 2.0, pct: 33}]
+  k_sl_initial: {india: 2.0, mt5_forex: 2.0, mt5_crypto: 3.0}
+  k_trail_by_regime: {STRONG_TREND: 3.0, WEAK_TREND: 2.0, RANGE: 1.25, SHOCK: 0.75}
+  min_ratchet_step_atr: 0.25
+  max_bars_no_progress: {india: 20, mt5_forex: 30, mt5_crypto: 16}
+  event_tighten_minutes: 30
+  crypto_weekend_policy: tighten
+  never_widen_stop: true
+
+news_reaction_model:                  # MODULE 37
+  model_type: lightgbm
+  horizons: [5m, 1h, 1d, 5d]
+  head_5m_role: risk_only
+  abstain_below_confidence: 0.6
+  min_training_events: 20000
+  vix_interaction: true
+
+learning_orchestrator:                # MODULE 38
+  ledger: append_only
+  recalibrate: nightly
+  autopsy: weekly
+  retrain: monthly
+  promotion_gate: {holdout_months: 6, human_approval: true}
+  regime_stratified_training: true
+  sample_half_life_years: 4
+  self_demote_on_calibration_drift: true
+  luck_vs_skill_autopsy: true
+
+learning_loop:
+  min_matching_cases: 3
+  min_consistency_score: 0.7
+  rule_audit_period_days: 90
+
+pattern_discovery:
+  min_regimes_passed: 5
+  min_dsr_probability: 0.95           # DSR is a probability (v2 fix)
+  min_occurrences: 30                 # v2 fix (was 5)
+  scan_frequency: monthly
+
+kill_switch:                          # MODULE 1
+  auto_trigger_daily_loss_pct: 0.03
+  auto_trigger_var_breach: true
+  redis_unreachable_behavior: halt    # FAIL-CLOSED. Only valid value.
+  unlock_phrase: ${KILL_SWITCH_UNLOCK_PHRASE}
+  sentinel_file: /tmp/trading_halted.sentinel
+
+cockpit:                              # MODULE 44/45
+  auth: token
+  ws_heartbeat_sec: 15
