@@ -1,0 +1,60 @@
+{
+ "window": "2025-12-03 \u2192 2026-08-03 (244 real market days)",
+ "underlying_real": {
+  "RELIANCE": {
+   "bars": 166,
+   "first": "2025-12-03",
+   "last": "2026-07-31",
+   "start_px": 1531.718,
+   "end_px": 1307.8,
+   "period_return_pct": -14.62,
+   "real_max_drawdown_pct": 20.58
+  },
+  "EURUSD": {
+   "bars": 172,
+   "first": "2025-12-03",
+   "last": "2026-08-03",
+   "start_px": 1.1628,
+   "end_px": 1.151,
+   "period_return_pct": -1.01,
+   "real_max_drawdown_pct": 5.52
+  },
+  "BTCUSD": {
+   "bars": 244,
+   "first": "2025-12-03",
+   "last": "2026-08-03",
+   "start_px": 93527.8047,
+   "end_px": 63875.3516,
+   "period_return_pct": -31.7,
+   "real_max_drawdown_pct": 39.59
+  }
+ },
+ "strategy": {
+  "final_equity": 994782.83,
+  "return_pct": -0.52,
+  "MAX_DRAWDOWN_pct": 3.14,
+  "buy_hold_equal_weight_return_pct": -15.78,
+  "entries": 33,
+  "fills": 71,
+  "total_costs": 981.36,
+  "costs_by_leg": {
+   "mt5_crypto": 264.6,
+   "india": 671.57,
+   "mt5_forex": 45.19
+  },
+  "exit_reasons": {
+   "stop_hit": 8,
+   "time_stop_no_progress": 24
+  },
+  "entry_rejections": {},
+  "reconciliation": "CLEAN",
+  "audit_rows": 33,
+  "audit_chain_ok": true
+ },
+ "gate_after_replay": {
+  "paper_days_completed": 244,
+  "clean_reconciliation_streak": 244,
+  "sebi_checks_passed": false,
+  "human_ack": ""
+ }
+}

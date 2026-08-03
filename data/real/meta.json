@@ -1,0 +1,29 @@
+{
+ "RELIANCE": {
+  "bars": 166,
+  "first": "2025-12-03",
+  "last": "2026-07-31",
+  "start_px": 1531.718,
+  "end_px": 1307.8,
+  "period_return_pct": -14.62,
+  "real_max_drawdown_pct": 20.58
+ },
+ "EURUSD": {
+  "bars": 172,
+  "first": "2025-12-03",
+  "last": "2026-08-03",
+  "start_px": 1.1628,
+  "end_px": 1.151,
+  "period_return_pct": -1.01,
+  "real_max_drawdown_pct": 5.52
+ },
+ "BTCUSD": {
+  "bars": 244,
+  "first": "2025-12-03",
+  "last": "2026-08-03",
+  "start_px": 93527.8047,
+  "end_px": 63875.3516,
+  "period_return_pct": -31.7,
+  "real_max_drawdown_pct": 39.59
+ }
+}

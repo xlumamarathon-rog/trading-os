@@ -37,9 +37,13 @@ class PaperFill:
 class PaperBroker:
     def __init__(self, *, costs: IndiaCosts, impact: ImpactModel,
                  starting_cash: float, adv_map: Optional[dict] = None,
-                 daily_sigma_map: Optional[dict] = None) -> None:
+                 daily_sigma_map: Optional[dict] = None,
+                 mt5_cost_map: Optional[dict] = None) -> None:
+        """mt5_cost_map: {symbol: {"half_spread": abs_price, "commission_pct": frac}}
+        — MT5-leg symbols pay spread+commission (real CFD schedule), never India STT."""
         self.costs = costs
         self.impact = impact
+        self.mt5_cost_map = mt5_cost_map or {}
         self.cash = starting_cash
         self.starting_cash = starting_cash
         self.adv_map = adv_map or {}
@@ -119,8 +123,12 @@ class PaperBroker:
         sigma = self.sigma_map.get(symbol, 0.02)
         slip = impact_fraction(self.impact, qty, adv, sigma)
         price = ref_price * (1 + slip) if action == "BUY" else ref_price * (1 - slip)
-        cost = india_trade_cost(self.costs, action.lower(), qty, price,
-                                "delivery" if product == "CNC" else "intraday").total
+        if symbol in self.mt5_cost_map:
+            mc = self.mt5_cost_map[symbol]
+            cost = mc.get("half_spread", 0.0) * qty + mc.get("commission_pct", 0.0) * qty * price
+        else:
+            cost = india_trade_cost(self.costs, action.lower(), qty, price,
+                                    "delivery" if product == "CNC" else "intraday").total
         pos = self.positions.setdefault(symbol, {"qty": 0.0, "avg_price": 0.0})
         signed = qty if action == "BUY" else -qty
         new_qty = pos["qty"] + signed

@@ -14,7 +14,19 @@
 | Modules with code + passing tests | **45 of 45** (M45 = full Next.js cockpit, verified rendering) |
 | GitHub pushes | 15 (wave-by-wave, each after a green run) |
 
-## Wave 10 — REAL WEB UI (this session)
+## Wave 11 — REAL-MARKET PAPER REPLAY (this session)
+
+| Evidence | Value |
+|---|---|
+| Data | **Real Yahoo Finance daily OHLC**, Dec 2025 → Aug 2026: RELIANCE.NS (NSE stock), EURUSD (currency pair), BTC-USD — replayed tick-by-tick with every day's TRUE open/high/low/close preserved |
+| The real market | equal-weight buy&hold **−15.78%**; real max drawdowns: BTC **39.6%**, RELIANCE **20.6%**, EURUSD 5.5% (a genuine bear window) |
+| **The system (full stack, after real costs)** | **−0.52% return · 3.14% max drawdown** — 33 entries, 71 fills, 8 stop-hits, 24 time-stops |
+| Real brokerage charged | ₹981 total — India schedule (brokerage+STT+exchange+stamp+GST) ₹672; MT5 CFD spread+commission for EURUSD/BTC (per-leg costs added to PaperBroker + tested) |
+| Gate after replay | 244 real days, streak 244 → live gate now blocks **ONLY on the human items** (SEBI checks, static IP, human ack) — exactly as designed |
+| Integrity | final reconciliation CLEAN · audit chain intact |
+| Artifacts | `scripts/paper_replay_real.py`, `data/real_replay/results.json`, `equity_vs_market.png` |
+
+## Wave 10 — REAL WEB UI (prior session)
 
 | Piece | Status |
 |---|---|

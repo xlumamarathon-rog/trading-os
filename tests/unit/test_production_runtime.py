@@ -196,3 +196,25 @@ def test_daily_report_contains_evidence_fields():
     assert "CLEAN" in report and "RELIANCE" in report and "512.3" in report
     dirty = generate_daily_report("2026-08-05", state, fills, False, 12)
     assert "does NOT count" in dirty
+
+
+# ---------------- per-leg paper costs (real-market replay support) ----------------
+
+def test_paper_broker_mt5_symbols_pay_spread_not_stt():
+    from src.core.paper_broker import PaperBroker
+    CFG2 = load_config("config/master.yaml")
+    b = PaperBroker(costs=CFG2.execution_costs.india, impact=CFG2.execution_costs.impact_model,
+                    starting_cash=1_000_000, adv_map={"EURUSD": 1e12, "RELIANCE": 5e6},
+                    daily_sigma_map={"EURUSD": 0.005, "RELIANCE": 0.015},
+                    mt5_cost_map={"EURUSD": {"half_spread": 0.00005, "commission_pct": 0.000035}})
+    b.on_tick("EURUSD", 1.0850)
+    b.on_tick("RELIANCE", 2500.0)
+    r1 = b.place_order({"symbol": "EURUSD", "action": "BUY", "quantity": 10_000,
+                        "pricetype": "MARKET", "product": "MIS"})
+    fx_cost = b.fills[-1].cost
+    expected = 0.00005 * 10_000 + 0.000035 * 10_000 * b.fills[-1].price
+    assert r1["status"] == "success" and abs(fx_cost - expected) < 1e-6
+    b.place_order({"symbol": "RELIANCE", "action": "BUY", "quantity": 10,
+                   "pricetype": "MARKET", "product": "MIS"})
+    in_cost = b.fills[-1].cost
+    assert in_cost > 20.0        # India schedule (brokerage flat + charges), not spread math
