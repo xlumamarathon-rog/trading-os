@@ -40,6 +40,8 @@ def india_trade_cost(
         raise ValueError(f"side must be one of {VALID_SIDES}")
     if product not in VALID_PRODUCTS:
         raise ValueError(f"product must be one of {VALID_PRODUCTS}")
+    if not (math.isfinite(qty) and math.isfinite(price)):
+        raise ValueError(f"non-finite qty/price: {qty}, {price}")   # loud — never charge NaN
     if qty <= 0 or price <= 0:
         return CostBreakdown(notional=0.0)
 
@@ -81,6 +83,8 @@ def impact_cost(
     Conservative convention: the full impact fraction is applied to the whole
     quantity (upper bound vs the Almgren average-price half-factor).
     """
+    if not all(math.isfinite(v) for v in (qty, price, adv_shares, daily_sigma)):
+        return 0.0
     if qty <= 0 or price <= 0 or adv_shares <= 0 or daily_sigma < 0:
         return 0.0
     frac = impact.y_coefficient * daily_sigma * math.sqrt(qty / adv_shares)
@@ -88,6 +92,8 @@ def impact_cost(
 
 
 def impact_fraction(impact: ImpactModel, qty: float, adv_shares: float, daily_sigma: float) -> float:
+    if not all(math.isfinite(v) for v in (qty, adv_shares, daily_sigma)):
+        return 0.0
     if qty <= 0 or adv_shares <= 0 or daily_sigma < 0:
         return 0.0
     return impact.y_coefficient * daily_sigma * math.sqrt(qty / adv_shares)

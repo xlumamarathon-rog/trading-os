@@ -52,6 +52,13 @@ def calculate_position_size(
     expected_profit_per_unit: Optional[float] = None,
     cost_fn: Optional[Callable[[float], float]] = None,
 ) -> SizeResult:
+    finite_checks = [entry, stop, atr, balance, current_var, lot_size]
+    if p_win is not None:
+        finite_checks.append(p_win)
+    if payoff_ratio is not None:
+        finite_checks.append(payoff_ratio)
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in finite_checks):
+        return _zero("non_finite_inputs")     # NaN/inf from a bad feed must NEVER size an order
     if entry <= 0 or balance <= 0 or atr < 0 or lot_size <= 0:
         return _zero("invalid_inputs")
 
@@ -79,8 +86,10 @@ def calculate_position_size(
     qty = min(qty, cap_qty)
     factors["cap_qty"] = cap_qty
 
-    # 4. VaR headroom
-    headroom = max(0.0, 1.0 - (current_var / risk.max_var_daily))
+    # 4. VaR headroom — CLAMPED to [0, 1]: headroom is a reducer, never a booster.
+    # (Fuzz-caught bug: negative current_var made this multiplier 51x — a corrupt
+    # VaR cache value must shrink-or-hold size, never inflate it.)
+    headroom = max(0.0, min(1.0, 1.0 - (current_var / risk.max_var_daily)))
     factors["var_headroom"] = headroom
     qty *= headroom
     if qty <= 0:
@@ -99,7 +108,8 @@ def calculate_position_size(
         if expected_profit_per_unit * qty <= total_cost:
             return _zero("no_net_edge_after_costs", factors)
 
-    # 7. lot floor
+    # 7. defense-in-depth: re-assert the hard cap AFTER every multiplier, then lot floor
+    qty = min(qty, cap_qty)
     qty = math.floor(qty / lot_size) * lot_size
     if qty <= 0:
         return _zero("below_min_lot", factors)

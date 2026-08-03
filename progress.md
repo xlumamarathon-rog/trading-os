@@ -14,7 +14,20 @@
 | Modules with code + passing tests | **45 of 45** (M45 = full Next.js cockpit, verified rendering) |
 | GitHub pushes | 15 (wave-by-wave, each after a green run) |
 
-## Wave 12 — LIVE-TRADING READINESS (this session)
+## Wave 13 — ADVERSARIAL HARDENING (this session)
+
+**New robustness suite** (`tests/robustness/`): NaN/inf injection, poison ticks, corrupt bars, 800-case sizer fuzz, 300-sequence order-state-machine invariant fuzz, money-conservation invariant, concurrent kill/router load, math edge locks.
+
+**5 REAL BUGS found and fixed (each now regression-locked):**
+1. Position sizer accepted NaN/inf → would have sent a NaN-quantity order to a broker → hard non-finite guard, named zero-reason
+2. **VaR-headroom multiplier could BOOST size 51× on a negative/corrupt VaR value** → clamped to [0,1] + hard cap re-asserted after every multiplier (defense-in-depth)
+3. Cost model silently computed NaN charges → loud ValueError
+4. Exit engine processed corrupt bars (NaN / high<low) → skipped+logged, stops never move on garbage
+5. Tick feed forwarded poison ticks (0/negative/NaN) into guard baselines → counted+skipped, spine survives
+
+**Verified after fixes:** 267 tests green · both simulations reproduce bit-for-bit identical results (pure hardening, zero behavior change) · money-module coverage: sizer 100%, exit engine 98%, OSM 95%, router 94%.
+
+## Wave 12 — LIVE-TRADING READINESS (prior)
 
 | Piece | Status |
 |---|---|

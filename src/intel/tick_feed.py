@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import time
 
+import math
+
 from src.intel.anomaly_guard import Tick
 
 
@@ -25,10 +27,19 @@ class TickFeedWorker:
         self.sub_bar = sub_bar_ticks
         self._windows: dict[str, list] = {}
         self.processed = 0
+        self.bad_ticks = 0
 
     async def run(self) -> None:
         async for tick in self.stream_factory():
-            sym, px = tick["symbol"], float(tick["price"])
+            sym = tick.get("symbol")
+            try:
+                px = float(tick["price"])
+            except (KeyError, TypeError, ValueError):
+                self.bad_ticks += 1
+                continue
+            if not sym or not math.isfinite(px) or px <= 0:
+                self.bad_ticks += 1              # poison tick: counted, surfaced, NEVER fanned out
+                continue
             ts = float(tick.get("ts", time.time()))
             await self.guard.process_tick(sym, Tick(
                 ts=ts, price=px, bid=float(tick.get("bid", px)),

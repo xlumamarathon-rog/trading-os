@@ -191,6 +191,11 @@ class ExitManager:
         pos = self.positions.get(symbol)
         if pos is None or pos.state == "EXITED":
             return []
+        import math as _m
+        if not all(isinstance(v, (int, float)) and _m.isfinite(v)
+                   for v in (high, low, close)) or high < low:
+            logger.error("corrupt bar for %s skipped: %s", symbol, (high, low, close))
+            return ["skipped:corrupt_bar"]      # a bad feed row must never move a stop
         actions: list[str] = []
 
         # 0. crypto weekend flatten policy
