@@ -15,7 +15,7 @@
 | Money-module coverage | position sizer **100%** · exit engine **98%** · order state machine 95% · router 94% |
 | Safety lint | 0 violations (broker-import allowlist · except-pass ban · AST kill-switch-first proof · after-cost-only backtests) |
 | Modules | **45/45** code-complete + tested |
-| Real-market validation | 244 real days replayed: market **−15.8%** vs system **−0.52%**, max DD **3.14%** ([details](#proven-on-real-market-data)) |
+| Real-market validation | 244 real days replayed: market **−15.8%** vs system **−0.52%**, max DD **3.14%** — strategy lab best: bear **−0.14%** / COVID **+19.3%** ([details](#proven-on-real-market-data)) |
 
 ## What this system is
 
@@ -43,6 +43,17 @@
 | **Strategy (after costs)** | — | **−0.52% · max DD 3.14%** |
 
 8 broker-side stop-hits and 24 time-stops did the protecting. Reconciliation CLEAN, audit chain intact. (`scripts/paper_replay_real.py`, chart in `data/real_replay/`.) *This validates the machinery, not the deliberately-simple demo entry signal.*
+
+### Strategy lab — Market vs Our System (Aug 2026)
+
+`scripts/research_replay.py` replays candidate entry signals through the **same real stack** (real sizer, router, ExitManager trailing, kill-switch, real cost schedules) on two real windows. Five candidate families were benchmarked (baseline SMA20, TSMOM, Donchian, RSI-2, regime-filtered trend); the best combo is a regime-filtered trend entry — no fresh entries during a SHOCK vol regime, close > SMA20 **and** SMA50, 21-day momentum positive — with tighter trailing (2.0/1.5/1.0/0.5 ATR by regime) and a 50% partial at 1.5R:
+
+| Window | Real market (equal-weight B&H) | Production baseline | Strategy-lab best |
+|---|---|---|---|
+| 2026 bear (Dec 2025 → Aug 2026, 244 days) | **−15.78%** | −0.64% · max DD 3.14% | **−0.14% · max DD 0.61%** |
+| COVID crash (Oct 2019 → Jun 2020, 274 days) | +14.85% | +10.09% · max DD 6.65% | **+19.31% · max DD 7.3% · Sharpe 0.84** |
+
+The trailing engine was stress-tested separately: tight trails alone lifted the COVID window from +9.7% to +15.2% with zero bear-window penalty; loose trails gave profits back (+6.8%). Every run: reconciliation CLEAN, audit chain intact, live gate stayed shut. Two hardening items surfaced (ExitManager crashes on an empty `partials` list; the paper wire stack only supports protective stops for long positions) — tracked as pre-live fixes, not gate items.
 
 ## The bug ledger — what five layers of testing each caught
 
