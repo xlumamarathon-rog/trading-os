@@ -1,0 +1,20 @@
+{
+ "RELIANCE": {
+  "bars": 210,
+  "first": "2008-05-20",
+  "last": "2009-03-30",
+  "start_px": 297.4953,
+  "end_px": 173.317474,
+  "period_return_pct": -41.74,
+  "real_max_drawdown_pct": 65.14
+ },
+ "EURUSD": {
+  "bars": 210,
+  "first": "2008-05-18",
+  "last": "2009-03-30",
+  "start_px": 1.552795,
+  "end_px": 1.324696,
+  "period_return_pct": -14.69,
+  "real_max_drawdown_pct": 22.61
+ }
+}

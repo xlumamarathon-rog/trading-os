@@ -1,0 +1,20 @@
+{
+ "RELIANCE": {
+  "bars": 130,
+  "first": "2012-06-18",
+  "last": "2012-12-28",
+  "start_px": 164.328445,
+  "end_px": 192.067017,
+  "period_return_pct": 16.88,
+  "real_max_drawdown_pct": 21.91
+ },
+ "EURUSD": {
+  "bars": 140,
+  "first": "2012-06-17",
+  "last": "2012-12-31",
+  "start_px": 1.270487,
+  "end_px": 1.322769,
+  "period_return_pct": 4.12,
+  "real_max_drawdown_pct": 5.11
+ }
+}

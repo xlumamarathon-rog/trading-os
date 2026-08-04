@@ -64,7 +64,17 @@ STARTING_CASH = 1_000_000.0
 
 
 def load_real():
-    return {sym: json.loads((DATA_DIR / f"{sym}.json").read_text()) for sym in META}
+    """Load whichever META symbols exist in DATA_DIR (e.g. no BTC before 2014)."""
+    out = {}
+    for sym in list(META):
+        p = DATA_DIR / f"{sym}.json"
+        if p.exists():
+            out[sym] = json.loads(p.read_text())
+        else:
+            META.pop(sym)
+    if not out:
+        raise SystemExit(f"no symbol data found in {DATA_DIR}")
+    return out
 
 
 def atr14(bars, i):
