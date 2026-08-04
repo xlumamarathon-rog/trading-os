@@ -226,14 +226,16 @@ class ExitManager:
         r_now = self._r_multiple(pos, close)
         partial_cfgs = self.cfg["partials"]
 
-        # 4. breakeven + partial 1
+        # 4. breakeven + partial 1 (partials may legitimately be empty:
+        #    breakeven ratchet + trailing still apply, runner keeps full size)
         if pos.state == "RISK_ON" and r_now >= float(self.cfg["breakeven_at_r"]):
             if await self._ratchet_stop(pos, pos.entry):
                 actions.append("stop_to_breakeven")
-            p1 = partial_cfgs[0]
-            if float(p1["at_r"]) not in pos.partials_taken:
-                await self._take_partial(pos, float(p1["at_r"]), float(p1["pct"]), close)
-                actions.append("partial_1")
+            if partial_cfgs:
+                p1 = partial_cfgs[0]
+                if float(p1["at_r"]) not in pos.partials_taken:
+                    await self._take_partial(pos, float(p1["at_r"]), float(p1["pct"]), close)
+                    actions.append("partial_1")
             pos.state = "BREAKEVEN"
 
         # 5. partial 2 → TRAILING

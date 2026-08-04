@@ -87,23 +87,39 @@ def create_paper_server(broker: PaperBroker) -> FastAPI:
         return {"broker_order_id": found["orderid"], "status": "filled",
                 "filled_qty": found["filled_qty"], "avg_price": found.get("avg_price")}
 
+    def _closing_action(symbol: str) -> str:
+        """Protective stops and closes act AGAINST the open position:
+        long → SELL, short → BUY. Falls back to SELL when flat (legacy)."""
+        pos = broker.positions.get(symbol)
+        if pos and pos["qty"] < 0:
+            return "BUY"
+        return "SELL"
+
     @app.post("/position/stop")
     async def mt5_stop(body: dict):
-        result = broker.place_order({"symbol": body["symbol"], "action": "SELL",
+        result = broker.place_order({"symbol": body["symbol"],
+                                     "action": _closing_action(body["symbol"]),
                                      "quantity": body["lots"], "pricetype": "SL-M",
                                      "trigger_price": body["sl"], "product": "MIS"})
         return {"position_id": result["orderid"]}
 
     @app.post("/position/modify")
     async def mt5_modify(body: dict):
-        result = broker.modify_order(body["position_id"], float(body["sl"]))
+        sl = float(body["sl"])
+        if sl <= 0:
+            # MT5 semantics: sl=0 clears the stop. A resting BUY stop with
+            # trigger 0 would insta-fire, so clearing must cancel the order.
+            result = broker.cancel_order(body["position_id"])
+        else:
+            result = broker.modify_order(body["position_id"], sl)
         if result.get("status") != "success":
             raise HTTPException(status_code=400, detail=result.get("message"))
         return {"ok": True}
 
     @app.post("/position/close")
     async def mt5_close(body: dict):
-        result = broker.place_order({"symbol": body["symbol"], "action": "SELL",
+        result = broker.place_order({"symbol": body["symbol"],
+                                     "action": _closing_action(body["symbol"]),
                                      "quantity": body["lots"], "pricetype": "MARKET",
                                      "product": "MIS"})
         return {"ok": result.get("status") == "success"}
