@@ -70,8 +70,11 @@ class PaperBroker:
             hit = price <= trig if order["action"] == "SELL" else price >= trig
             if hit:
                 del self.open_orders[oid]
+                # GAP-AWARE fill: if price gapped THROUGH the trigger, you get the
+                # gapped price, not your trigger (real-market stop semantics).
+                fill_ref = min(trig, price) if order["action"] == "SELL" else max(trig, price)
                 triggered.append(self._fill(oid, symbol, order["action"],
-                                            order["quantity"], ref_price=trig,
+                                            order["quantity"], ref_price=fill_ref,
                                             product=order.get("product", "MIS")))
         return triggered
 

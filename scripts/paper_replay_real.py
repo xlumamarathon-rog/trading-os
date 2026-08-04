@@ -46,7 +46,8 @@ from src.ops.paper_report import advance_gate
 from src.ops.paper_server import create_paper_server
 from src.ops.persistence import JsonlAuditLog
 
-OUT = Path("data/real_replay")
+DATA_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("data/real")
+OUT = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("data/real_replay")
 CFG = load_config("config/master.yaml")
 
 META = {
@@ -65,7 +66,7 @@ STARTING_CASH = 1_000_000.0
 def load_real():
     data = {}
     for sym in META:
-        data[sym] = json.loads((Path("data/real") / f"{sym}.json").read_text())
+        data[sym] = json.loads((DATA_DIR / f"{sym}.json").read_text())
     return data
 
 
@@ -253,7 +254,7 @@ async def run():
     for v in eq:
         peak = max(peak, v)
         mdd = max(mdd, (peak - v) / peak)
-    meta = json.loads(Path("data/real/meta.json").read_text())
+    meta = json.loads((DATA_DIR / "meta.json").read_text())
     bh = sum(m["period_return_pct"] for m in meta.values()) / len(meta)
 
     cost_by_leg = {}

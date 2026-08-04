@@ -1,0 +1,26 @@
+{
+ "RELIANCE": {
+  "bars": 183,
+  "first": "2019-10-01",
+  "last": "2020-06-30",
+  "period_return_pct": 31.83,
+  "real_max_drawdown_pct": 45.09,
+  "worst_single_day_pct": -13.15
+ },
+ "EURUSD": {
+  "bars": 196,
+  "first": "2019-10-01",
+  "last": "2020-06-30",
+  "period_return_pct": 3.19,
+  "real_max_drawdown_pct": 6.5,
+  "worst_single_day_pct": -2.78
+ },
+ "BTCUSD": {
+  "bars": 274,
+  "first": "2019-10-01",
+  "last": "2020-06-30",
+  "period_return_pct": 9.53,
+  "real_max_drawdown_pct": 51.86,
+  "worst_single_day_pct": -37.17
+ }
+}

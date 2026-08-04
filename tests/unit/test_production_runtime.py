@@ -218,3 +218,19 @@ def test_paper_broker_mt5_symbols_pay_spread_not_stt():
                    "pricetype": "MARKET", "product": "MIS"})
     in_cost = b.fills[-1].cost
     assert in_cost > 20.0        # India schedule (brokerage flat + charges), not spread math
+
+
+def test_paper_stop_fills_at_gapped_price_not_trigger():
+    """COVID-certification fidelity: gap through the stop => fill at the gap."""
+    from src.core.paper_broker import PaperBroker
+    CFG3 = load_config("config/master.yaml")
+    b = PaperBroker(costs=CFG3.execution_costs.india, impact=CFG3.execution_costs.impact_model,
+                    starting_cash=1_000_000, adv_map={"X": 1e15}, daily_sigma_map={"X": 0.0})
+    b.on_tick("X", 100.0)
+    b.place_order({"symbol": "X", "action": "BUY", "quantity": 10,
+                   "pricetype": "MARKET", "product": "MIS"})
+    b.place_order({"symbol": "X", "action": "SELL", "quantity": 10,
+                   "pricetype": "SL-M", "trigger_price": 95.0, "product": "MIS"})
+    triggered = b.on_tick("X", 88.0)                      # overnight-style gap through
+    assert len(triggered) == 1
+    assert triggered[0].price == 88.0                      # gapped price, NOT 95

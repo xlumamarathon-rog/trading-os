@@ -14,7 +14,19 @@
 | Modules with code + passing tests | **45 of 45** (M45 = full Next.js cockpit, verified rendering) |
 | GitHub pushes | 15 (wave-by-wave, each after a green run) |
 
-## Wave 13 — ADVERSARIAL HARDENING (this session)
+## Wave 14 — COVID-CRASH STRESS CERTIFICATION (final)
+
+| Evidence | Value |
+|---|---|
+| Data | Real Yahoo Finance daily OHLC, **Oct 2019 → Jun 2020** — through Black Thursday (BTC **−37.17% in one day**, 12 Mar 2020) |
+| The real market | max drawdowns: BTC **51.86%** · RELIANCE **45.09%** · EURUSD 6.5%; equal-weight buy&hold +14.85% (after riding ~50% drawdowns) |
+| **The system (full stack, real costs, GAP-AWARE stop fills)** | **+10.09% return · MAX DRAWDOWN 6.65%** — ⅔ of buy&hold's return at **~1/7th of its drawdown** |
+| Execution detail | 46 entries, 110 fills, **17 stop-hits filled at gapped prices (not triggers)**, 27 time-stops, ₹4,365 real costs (crypto spreads dominate, as they should) |
+| Fidelity upgrade shipped | Paper broker stop fills are now **gap-aware**: price gapping through a trigger fills at the gapped price — real-market stop semantics (unit-tested) |
+| Integrity | 274 days replayed · reconciliation CLEAN · audit chain intact · live gate blocks only on human items |
+| Artifacts | `data/real_covid/` (real crash data) · `data/covid_replay/results.json` · `covid_certification.png` · replay script now parametric (`paper_replay_real.py <data_dir> <out_dir>`) |
+
+## Wave 13 — ADVERSARIAL HARDENING (prior)
 
 **New robustness suite** (`tests/robustness/`): NaN/inf injection, poison ticks, corrupt bars, 800-case sizer fuzz, 300-sequence order-state-machine invariant fuzz, money-conservation invariant, concurrent kill/router load, math edge locks.
 
