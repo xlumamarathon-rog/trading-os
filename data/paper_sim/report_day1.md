@@ -6,7 +6,7 @@
 | Costs charged | 224.71 |
 | Open positions | 3 |
 | Resting stops | 3 |
-| Audit rows | 34 |
+| Audit rows | 45 |
 | EOD reconciliation | CLEAN |
 
 ## Fills

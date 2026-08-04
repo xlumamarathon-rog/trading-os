@@ -48,7 +48,7 @@
   },
   "entry_rejections": {},
   "reconciliation": "CLEAN",
-  "audit_rows": 33,
+  "audit_rows": 66,
   "audit_chain_ok": true
  },
  "gate_after_replay": {
