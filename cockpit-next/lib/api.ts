@@ -40,6 +40,12 @@ export const api = {
   pause: (token: string, reason: string) =>
     req('/control/pause_entries', token, { method: 'POST',
       body: JSON.stringify({ reason }) }),
+  // SAFE-START release (OPERATOR.md step 7): a fresh LIVE process trades
+  // only after this deliberate click.
+  resume: (token: string, reason: string) =>
+    req('/control/resume_entries', token, { method: 'POST',
+      body: JSON.stringify({ reason }) }),
+  whoami: (token: string): Promise<{ role: string }> => req('/whoami', token),
   approve: (token: string, id: string) =>
     req(`/control/approve/${id}`, token, { method: 'POST', body: '{}' }),
 };

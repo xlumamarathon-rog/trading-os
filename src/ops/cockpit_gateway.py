@@ -75,7 +75,16 @@ def create_gateway(
     async def state(actor: dict = Depends(authed)):
         snap = await snapshot_fn()
         snap["halted"] = await kill_switch.is_halted()
+        # per-CALLER role, not whatever placeholder the snapshot carries —
+        # the cockpits gate every operator control on this field
+        snap["role"] = actor["role"]
         return snap
+
+    @app.get("/whoami")
+    async def whoami(actor: dict = Depends(authed)):
+        """Side-effect-free role probe for clients. Never use a control
+        endpoint to discover role — that fires a real state change."""
+        return {"role": actor["role"]}
 
     @app.get("/approvals")
     async def approvals(actor: dict = Depends(authed)):

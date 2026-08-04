@@ -14,7 +14,16 @@ const POLL_MS = 3000;
 const KILL_PHRASE = "KILL ALL POSITIONS";
 
 const $ = (id) => document.getElementById(id);
-const state = { token: localStorage.getItem("cockpit_token") || "", role: null,
+
+/* localStorage throws in sandboxed iframes and some private-browsing modes —
+ * a thrown SecurityError at load killed the entire cockpit. Degrade to
+ * in-memory storage instead of dying. */
+const storage = (() => {
+  try { localStorage.setItem("__t", "1"); localStorage.removeItem("__t"); return localStorage; }
+  catch (_e) { const m = {}; return { getItem: (k) => m[k] ?? null, setItem: (k, v) => { m[k] = v; } }; }
+})();
+
+const state = { token: storage.getItem("cockpit_token") || "", role: null,
                 equityHistory: [], lastState: null };
 
 /* ---------------- gateway client (intents only) ---------------- */
@@ -73,6 +82,13 @@ function demoApi(path, opts) {
 
 /* ---------------- rendering ---------------- */
 
+/* Escape EVERYTHING interpolated into innerHTML. Event text and approval
+ * labels can carry news-derived strings — treat all of it as hostile. */
+function esc(x) {
+  return String(x ?? "").replace(/[&<>"']/g, (ch) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
 function fmtMoney(x) {
   return (x < 0 ? "-" : "") + "₹" + Math.abs(x).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
@@ -97,20 +113,24 @@ function render(s) {
   $("var-label").textContent = `${(v * 100).toFixed(2)}% of ${(varLimit * 100).toFixed(1)}% limit`;
 
   $("workers").innerHTML = Object.entries(s.workers || {})
-    .map(([name, ok]) => `<span class="chip ${ok ? "" : "dead"}">${name}${ok ? "" : " ✗"}</span>`)
+    .map(([name, ok]) => `<span class="chip ${ok ? "" : "dead"}">${esc(name)}${ok ? "" : " ✗"}</span>`)
     .join("") || "—";
 
   const tbody = $("positions").querySelector("tbody");
   tbody.innerHTML = (s.positions || []).map(p => `
-    <tr><td>${p.symbol}</td><td>${p.leg}</td><td>${p.qty}</td>
-    <td>${p.entry}</td><td>${p.stop}</td>
+    <tr><td>${esc(p.symbol)}</td><td>${esc(p.leg)}</td><td>${esc(p.qty)}</td>
+    <td>${esc(p.entry)}</td><td>${esc(p.stop)}</td>
     <td class="${p.r_now >= 0 ? "pos" : "neg"}">${(p.r_now ?? 0).toFixed(1)}R</td>
-    <td><span class="state ${p.state}">${p.state}</span></td>
+    <td><span class="state ${esc(p.state)}">${esc(p.state)}</span></td>
     <td>${(p.mfe_r ?? 0).toFixed(1)}R</td></tr>`).join("")
     || `<tr><td colspan="8" class="sub">no open positions</td></tr>`;
 
   $("events").innerHTML = (s.events || []).map(e =>
-    `<div class="row"><span class="t">${e.t}</span><span>${e.m}</span></div>`).join("");
+    `<div class="row"><span class="t">${esc(e.t)}</span><span>${esc(e.m)}</span></div>`).join("");
+
+  const canResume = state.role === "operator" && !s.halted;
+  $("resume-btn").classList.toggle("hidden", !canResume);
+  if (!canResume) $("resume-confirm").classList.add("hidden");
 
   state.equityHistory.push(s.equity ?? 0);
   if (state.equityHistory.length > 80) state.equityHistory.shift();
@@ -137,9 +157,9 @@ function drawSpark() {
 async function renderApprovals() {
   const items = await api("/approvals").catch(() => []);
   $("approvals").innerHTML = (items || []).map(a => `
-    <div class="row"><span>${a.label || a.id}</span>
+    <div class="row"><span>${esc(a.label || a.id)}</span>
     ${state.role === "operator"
-      ? `<button class="ghost small approve" data-id="${a.id}">APPROVE</button>` : ""}
+      ? `<button class="ghost small approve" data-id="${esc(a.id)}">APPROVE</button>` : ""}
     </div>`).join("") || `<div class="sub">nothing pending — the gates are quiet</div>`;
   document.querySelectorAll(".approve").forEach(btn =>
     btn.addEventListener("click", () => api(`/control/approve/${btn.dataset.id}`,
@@ -164,16 +184,20 @@ async function tick() {
 
 /* ---------------- controls (intents, never logic) ---------------- */
 
+async function probeRole() {
+  // side-effect-free role probe (GET /whoami). NEVER probe via a control
+  // endpoint — a POST /control/* is a REAL state change on a live system.
+  if (DEMO) { state.role = "operator"; return; }
+  try { state.role = (await api("/whoami")).role; }
+  catch (err) { state.role = null; }
+}
+
 function wire() {
   $("token").value = state.token;
   $("token").addEventListener("change", async (e) => {
     state.token = e.target.value.trim();
-    localStorage.setItem("cockpit_token", state.token);
-    // role probe: viewers get 403 on a no-op control preflight
-    if (!DEMO) {
-      try { await api("/control/pause_entries", { method: "POST", body: JSON.stringify({ reason: "role-probe", confirm: "" }) }); state.role = "operator"; }
-      catch (err) { state.role = err.message === "forbidden" ? "viewer" : state.role; }
-    }
+    storage.setItem("cockpit_token", state.token);
+    await probeRole();
     tick(); renderApprovals();
   });
 
@@ -192,9 +216,24 @@ function wire() {
     $("unlock-phrase").value = "";
     tick();
   });
+
+  // SAFE-START release (OPERATOR.md step 7): deliberate two-click resume.
+  $("resume-btn").addEventListener("click", () => $("resume-confirm").classList.remove("hidden"));
+  $("resume-cancel").addEventListener("click", () => $("resume-confirm").classList.add("hidden"));
+  $("resume-go").addEventListener("click", async () => {
+    await api("/control/resume_entries", { method: "POST",
+      body: JSON.stringify({ reason: "cockpit resume" }) }).catch(() => {});
+    $("resume-confirm").classList.add("hidden");
+    tick();
+  });
 }
 
-wire();
-tick();
-renderApprovals();
-setInterval(tick, POLL_MS);
+async function boot() {
+  wire();
+  await probeRole();       // role known BEFORE first render (stored token case)
+  tick();
+  renderApprovals();
+  setInterval(tick, POLL_MS);
+}
+
+boot();

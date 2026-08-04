@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 export default function KillSwitch({ token, halted, role, onDone }:
     { token: string; halted: boolean; role: string; onDone: () => void }) {
   const [confirming, setConfirming] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const [phrase, setPhrase] = useState('');
   const [reason, setReason] = useState('');
   const [unlockPhrase, setUnlockPhrase] = useState('');
@@ -20,6 +21,11 @@ export default function KillSwitch({ token, halted, role, onDone }:
     try { await api.unlock(token, unlockPhrase); setUnlockPhrase(''); setErr(''); onDone(); }
     catch (e: any) { setErr('unlock refused'); }
   }
+  // SAFE-START release (OPERATOR.md step 7): deliberate two-click resume.
+  async function doResume() {
+    try { await api.resume(token, 'cockpit resume'); setResuming(false); setErr(''); onDone(); }
+    catch (e: any) { setErr(e.message === 'forbidden' ? 'operator role required' : e.message); }
+  }
 
   return (
     <div className="card danger-card">
@@ -34,6 +40,14 @@ export default function KillSwitch({ token, halted, role, onDone }:
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="reason (logged)" />
           <button className="kill small" onClick={doKill}>CONFIRM KILL</button>
           <button className="ghost small" onClick={() => setConfirming(false)}>cancel</button>
+        </div>)}
+      {!halted && op && !resuming && (
+        <button className="ghost small" onClick={() => setResuming(true)}>RESUME ENTRIES</button>)}
+      {!halted && op && resuming && (
+        <div>
+          <p className="dim">Safe-start release — the system will begin taking NEW entries:</p>
+          <button className="ghost small" onClick={doResume}>CONFIRM RESUME</button>
+          <button className="ghost small" onClick={() => setResuming(false)}>cancel</button>
         </div>)}
       {halted && (
         <div>
