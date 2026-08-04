@@ -18,8 +18,9 @@ class CompositeStopAdapter:
     def _pick(self, leg: str):
         return self._india if leg == "india" else self._mt5
 
-    async def place_stop(self, symbol, qty, stop_price, leg):
-        return await self._pick(leg).place_stop(symbol, qty, stop_price, leg)
+    async def place_stop(self, symbol, qty, stop_price, leg, *, direction="buy"):
+        return await self._pick(leg).place_stop(symbol, qty, stop_price, leg,
+                                                direction=direction)
 
     async def modify_stop(self, stop_order_id, new_price, leg):
         return await self._pick(leg).modify_stop(stop_order_id, new_price, leg)
@@ -29,11 +30,13 @@ class CompositeStopAdapter:
         if hasattr(adapter, "cancel_stop"):
             return await adapter.cancel_stop(stop_order_id, leg)
 
-    async def replace_stop(self, old_id, symbol, qty, trigger, leg):
+    async def replace_stop(self, old_id, symbol, qty, trigger, leg, *, direction="buy"):
         adapter = self._pick(leg)
         if hasattr(adapter, "replace_stop"):
-            return await adapter.replace_stop(old_id, symbol, qty, trigger, leg)
+            return await adapter.replace_stop(old_id, symbol, qty, trigger, leg,
+                                              direction=direction)
         return old_id
 
-    async def exit_market(self, symbol, qty, leg):
-        return await self._pick(leg).exit_market(symbol, qty, leg)
+    async def exit_market(self, symbol, qty, leg, *, direction="buy"):
+        return await self._pick(leg).exit_market(symbol, qty, leg,
+                                                 direction=direction)

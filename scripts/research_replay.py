@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import os
 import random
 import sys
 from pathlib import Path
@@ -49,6 +50,7 @@ STRATEGY = sys.argv[1] if len(sys.argv) > 1 else "baseline"
 DATA_DIR = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("data/real")
 OUT = Path(sys.argv[3]) if len(sys.argv) > 3 else Path(f"data/research/{STRATEGY}")
 EXIT_OVERRIDES = json.loads(sys.argv[4]) if len(sys.argv) > 4 else {}
+LONG_ONLY = bool(int(os.environ.get("LONG_ONLY", "0")))
 CFG = load_config("config/master.yaml")
 
 META = {
@@ -339,10 +341,10 @@ async def run():
 
             held = sym in exit_mgr.positions and exit_mgr.positions[sym].state != "EXITED"
             direction = None if held or not a else signal_fn(bars, i, regime)
-            # LONG/FLAT: the paper wire stack (and MT5 stop endpoints) only
-            # support protective stops for long positions today — a real
-            # finding from this research. "sell" signals mean STAY FLAT.
-            if direction == "sell":
+            # Shorts are now first-class: direction is threaded through the
+            # exit adapters (BUY protective stops / buy-back exits) and the
+            # paper server resolves the closing side from the open position.
+            if direction == "sell" and LONG_ONLY:
                 direction = None
             if direction:
                 stop = bar["open"] - 2 * a if direction == "buy" else bar["open"] + 2 * a

@@ -88,7 +88,8 @@ class ExitManager:
             struct_dist = abs(entry - structure_stop)
             dist = max(dist, struct_dist)          # widest protective distance wins
         stop = entry - dist if direction == "buy" else entry + dist
-        stop_order_id = await self.adapter.place_stop(symbol, qty, stop, leg)  # ≤2s rule
+        stop_order_id = await self.adapter.place_stop(symbol, qty, stop, leg,
+                                                      direction=direction)  # ≤2s rule
         pos = ManagedPosition(
             symbol=symbol, direction=direction, entry=entry, qty=qty, atr=atr, leg=leg,
             stop=stop, r_value=abs(entry - stop), stop_order_id=stop_order_id,
@@ -148,11 +149,13 @@ class ExitManager:
         pos.partials_taken.append(at_r)
         if qty <= 0:
             return  # position too small to carve a lot — ladder skipped, stop still protects
-        await self.adapter.exit_market(pos.symbol, qty, pos.leg)
+        await self.adapter.exit_market(pos.symbol, qty, pos.leg,
+                                       direction=pos.direction)
         pos.remaining_qty = max(0.0, pos.remaining_qty - qty)
         if pos.remaining_qty > 0 and hasattr(self.adapter, "replace_stop"):
             pos.stop_order_id = await self.adapter.replace_stop(
-                pos.stop_order_id, pos.symbol, pos.remaining_qty, pos.stop, pos.leg)
+                pos.stop_order_id, pos.symbol, pos.remaining_qty, pos.stop, pos.leg,
+                direction=pos.direction)
         if self.on_partial:
             await self.on_partial(pos.symbol, qty, price, at_r)
 
@@ -179,7 +182,8 @@ class ExitManager:
             lot = getattr(pos, "lot_size", 1.0)
             qty = _math.floor(pos.remaining_qty / lot) * lot
             if qty > 0:
-                await self.adapter.exit_market(pos.symbol, qty, pos.leg)
+                await self.adapter.exit_market(pos.symbol, qty, pos.leg,
+                                               direction=pos.direction)
         if self.on_exit:
             await self.on_exit(pos.symbol, pos.telemetry)
 

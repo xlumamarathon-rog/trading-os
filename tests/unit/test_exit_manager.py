@@ -21,7 +21,7 @@ class MockStopAdapter:
         self.placed, self.modified, self.exits = [], [], []
         self.cancelled, self.replaced = [], []
 
-    async def place_stop(self, symbol, qty, stop_price, leg):
+    async def place_stop(self, symbol, qty, stop_price, leg, **kw):
         self.placed.append((symbol, qty, stop_price, leg))
         return f"STOP-{len(self.placed)}"
 
@@ -31,11 +31,11 @@ class MockStopAdapter:
     async def cancel_stop(self, stop_order_id, leg):
         self.cancelled.append(stop_order_id)
 
-    async def replace_stop(self, old_id, symbol, qty, trigger, leg):
+    async def replace_stop(self, old_id, symbol, qty, trigger, leg, **kw):
         self.replaced.append((old_id, qty, trigger))
         return f"STOP-R{len(self.replaced)}"
 
-    async def exit_market(self, symbol, qty, leg):
+    async def exit_market(self, symbol, qty, leg, **kw):
         self.exits.append((symbol, qty))
 
 
@@ -252,14 +252,14 @@ async def test_composite_adapter_routes_by_leg():
         def __init__(self):
             self.calls = []
 
-        async def place_stop(self, symbol, qty, stop_price, leg):
+        async def place_stop(self, symbol, qty, stop_price, leg, **kw):
             self.calls.append(("place", symbol, qty))
             return f"{id(self)}-S1"
 
         async def modify_stop(self, oid, price, leg):
             self.calls.append(("modify", oid, price))
 
-        async def exit_market(self, symbol, qty, leg):
+        async def exit_market(self, symbol, qty, leg, **kw):
             self.calls.append(("exit", symbol, qty))
 
     india, mt5 = Recorder(), Recorder()

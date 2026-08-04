@@ -76,13 +76,13 @@ def test_cost_model_rejects_non_finite():
 # ================= exit engine: corrupt bars must not move stops =================
 
 class NullAdapter:
-    async def place_stop(self, *a):
+    async def place_stop(self, *a, **kw):
         return "S1"
 
     async def modify_stop(self, *a):
         pass
 
-    async def exit_market(self, *a):
+    async def exit_market(self, *a, **kw):
         pass
 
 

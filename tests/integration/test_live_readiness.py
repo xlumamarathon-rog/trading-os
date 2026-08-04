@@ -168,9 +168,9 @@ async def test_tick_feed_fans_out_and_heartbeats(tmp_path):
                          spread_blowout_mult=3, volume_spike_mult=5, cooloff_minutes=15)
 
     class NullAdapter:
-        async def place_stop(self, *a): return "S1"
+        async def place_stop(self, *a, **kw): return "S1"
         async def modify_stop(self, *a): pass
-        async def exit_market(self, *a): pass
+        async def exit_market(self, *a, **kw): pass
 
     exit_mgr = ExitManager(CFG.model_extra["exit_manager"], NullAdapter())
     sb = SnapshotBuilder(mode="paper")

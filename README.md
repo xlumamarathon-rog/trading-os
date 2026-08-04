@@ -54,7 +54,9 @@
 | 2026 bear (Dec 2025 → Aug 2026, 244 days) | **−15.78%** | −0.64% · max DD 3.14% | **−0.14% · max DD 0.61%** |
 | COVID crash (Oct 2019 → Jun 2020, 274 days) | +14.85% | +10.09% · max DD 6.65% | **+19.31% · max DD 7.3% · Sharpe 0.84** |
 
-The trailing engine was stress-tested separately: tight trails alone lifted the COVID window from +9.7% to +15.2% with zero bear-window penalty; loose trails gave profits back (+6.8%). Every run: reconciliation CLEAN, audit chain intact, live gate stayed shut. Two hardening items surfaced (ExitManager crashed on an empty `partials` list; the paper wire stack hard-coded SELL protective stops) — **both fixed with regression tests** (`tests/unit/test_empty_partials_and_short_stops.py`). India-leg shorts still need direction threaded through the exit adapters (future work).
+The trailing engine was stress-tested separately: tight trails alone lifted the COVID window from +9.7% to +15.2% with zero bear-window penalty; loose trails gave profits back (+6.8%). Every run: reconciliation CLEAN, audit chain intact, live gate stayed shut. Two hardening items surfaced (ExitManager crashed on an empty `partials` list; the paper wire stack hard-coded SELL protective stops) — **both fixed with regression tests** (`tests/unit/test_empty_partials_and_short_stops.py`).
+
+**Shorts are now first-class** (Aug 2026): `direction` is threaded through the ExitManager and all three stop adapters — short positions get BUY protective stops and buy-back exits on both legs (`tests/unit/test_short_side_exit_adapters.py`). Real-data validation of long/short TSMOM through the full stack: **+3.24% in the 2026 bear** (market −15.78%, long-flat variant +0.28%), +0.22% in GFC 2008 (market −28.2%), +1.0% in COVID — crisis alpha from the short book is real, at the cost of deeper drawdowns (6.5% vs 0.35%) and V-recovery whipsaw, exactly as the trend-following literature predicts.
 
 ## The bug ledger — what six layers of testing each caught
 

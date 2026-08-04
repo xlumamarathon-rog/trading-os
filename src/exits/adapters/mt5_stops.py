@@ -1,4 +1,10 @@
-"""M35 adapter — MT5 server-side SL via the Windows exec microservice."""
+"""M35 adapter — MT5 server-side SL via the Windows exec microservice.
+
+Short support (Aug 2026): MT5's SL is a POSITION attribute, so the service
+resolves the closing side from the open position itself. The adapter accepts
+`direction` (position side) for interface parity with IndiaStopAdapter and
+does not need to transmit it.
+"""
 from __future__ import annotations
 
 
@@ -6,7 +12,8 @@ class Mt5StopAdapter:
     def __init__(self, mt5_client) -> None:
         self.client = mt5_client
 
-    async def place_stop(self, symbol: str, qty: float, stop_price: float, leg: str) -> str:
+    async def place_stop(self, symbol: str, qty: float, stop_price: float, leg: str,
+                         *, direction: str = "buy") -> str:
         resp = await self.client.post("/position/stop", json={
             "symbol": symbol, "lots": qty, "sl": stop_price})
         resp.raise_for_status()
@@ -24,13 +31,15 @@ class Mt5StopAdapter:
         resp.raise_for_status()
 
     async def replace_stop(self, old_id: str, symbol: str, qty: float,
-                           trigger_price: float, leg: str) -> str:
+                           trigger_price: float, leg: str,
+                           *, direction: str = "buy") -> str:
         # Position-level SL persists across partial closes — same id remains valid.
         resp = await self.client.post("/position/modify", json={
             "position_id": old_id, "sl": trigger_price})
         resp.raise_for_status()
         return old_id
 
-    async def exit_market(self, symbol: str, qty: float, leg: str) -> None:
+    async def exit_market(self, symbol: str, qty: float, leg: str,
+                          *, direction: str = "buy") -> None:
         resp = await self.client.post("/position/close", json={"symbol": symbol, "lots": qty})
         resp.raise_for_status()

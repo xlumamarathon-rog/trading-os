@@ -29,7 +29,7 @@ class MockStopAdapter:
         self.placed, self.modified, self.exits = [], [], []
         self.cancelled = []
 
-    async def place_stop(self, symbol, qty, stop_price, leg):
+    async def place_stop(self, symbol, qty, stop_price, leg, **kw):
         self.placed.append((symbol, qty, stop_price, leg))
         return f"STOP-{len(self.placed)}"
 
@@ -39,7 +39,7 @@ class MockStopAdapter:
     async def cancel_stop(self, stop_order_id, leg):
         self.cancelled.append(stop_order_id)
 
-    async def exit_market(self, symbol, qty, leg):
+    async def exit_market(self, symbol, qty, leg, **kw):
         self.exits.append((symbol, qty))
 
 

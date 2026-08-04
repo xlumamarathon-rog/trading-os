@@ -2,10 +2,20 @@
 
 Payloads built by src/core/broker_payloads.py against vendor/openalgo source:
 strategy carries the SEBI Algo ID; response field is "orderid".
+
+Short support (Aug 2026): protective stops and exits act AGAINST the open
+position — long ("buy") positions close with SELL, short ("sell") positions
+close with BUY. `direction` is the POSITION side, defaulting to "buy" so every
+pre-existing caller keeps its exact long-side behavior.
 """
 from __future__ import annotations
 
 from src.core.broker_payloads import openalgo_modify_payload, openalgo_order_payload
+
+
+def closing_action(direction: str) -> str:
+    """Map position side -> closing order action (long→SELL, short→BUY)."""
+    return "SELL" if direction == "buy" else "BUY"
 
 
 class IndiaStopAdapter:
@@ -16,10 +26,11 @@ class IndiaStopAdapter:
         self.algo_id = algo_id
         self.exchange = exchange
 
-    async def place_stop(self, symbol: str, qty: float, stop_price: float, leg: str) -> str:
+    async def place_stop(self, symbol: str, qty: float, stop_price: float, leg: str,
+                         *, direction: str = "buy") -> str:
         resp = await self.client.post("/api/v1/placeorder", json=openalgo_order_payload(
             apikey=self.apikey, algo_id=self.algo_id, exchange=self.exchange,
-            symbol=symbol, action="SELL", quantity=qty,
+            symbol=symbol, action=closing_action(direction), quantity=qty,
             pricetype="SL-M", trigger_price=stop_price))
         resp.raise_for_status()
         return str(resp.json().get("orderid"))
@@ -35,12 +46,16 @@ class IndiaStopAdapter:
         resp.raise_for_status()
 
     async def replace_stop(self, old_id: str, symbol: str, qty: float,
-                           trigger_price: float, leg: str) -> str:
+                           trigger_price: float, leg: str,
+                           *, direction: str = "buy") -> str:
         await self.cancel_stop(old_id, leg)
-        return await self.place_stop(symbol, qty, trigger_price, leg)
+        return await self.place_stop(symbol, qty, trigger_price, leg,
+                                     direction=direction)
 
-    async def exit_market(self, symbol: str, qty: float, leg: str) -> None:
+    async def exit_market(self, symbol: str, qty: float, leg: str,
+                          *, direction: str = "buy") -> None:
         resp = await self.client.post("/api/v1/placeorder", json=openalgo_order_payload(
             apikey=self.apikey, algo_id=self.algo_id, exchange=self.exchange,
-            symbol=symbol, action="SELL", quantity=qty, pricetype="MARKET"))
+            symbol=symbol, action=closing_action(direction), quantity=qty,
+            pricetype="MARKET"))
         resp.raise_for_status()
