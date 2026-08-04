@@ -1,6 +1,6 @@
 # Trading OS
 
-**An open-source, Aladdin-class trading system** — India equities (NSE/BSE/MCX via OpenAlgo) + international forex & crypto CFDs (via MT5) — built spec-first by AI agents under hard test gates, hardened by five layers of testing, and proven on real market data.
+**An open-source, Aladdin-class trading system** — India equities (NSE/BSE/MCX via OpenAlgo) + international forex & crypto CFDs (via MT5) — built spec-first by AI agents under hard test gates, hardened by six layers of testing, and proven on real market data.
 
 > ⚠️ **Live trading is gated, not enabled.** All code is complete and tested, but `--mode live` refuses to start until the evidence gate passes — including three items that must be human: SEBI Feb-2025 registration (+ black-box/RA determination), broker static-IP confirmation, and a typed risk-acknowledgement phrase. See [The road to live](#the-road-to-live).
 
@@ -12,6 +12,7 @@
 |---|---|
 | Python tests | **267 passed / 0 failed** (unit · chaos · integration · vendor canaries · adversarial) |
 | Next.js cockpit | build clean · smoke **12/12** incl. Playwright render (28 chart canvases, 0 console errors) |
+| Full-stack E2E sweep | gateway API **28/28** (RBAC · typed confirmations · audit chain · traversal) · cockpit UI flows **23/23** · live-browser verified |
 | Money-module coverage | position sizer **100%** · exit engine **98%** · order state machine 95% · router 94% |
 | Safety lint | 0 violations (broker-import allowlist · except-pass ban · AST kill-switch-first proof · after-cost-only backtests) |
 | Modules | **45/45** code-complete + tested |
@@ -53,9 +54,9 @@
 | 2026 bear (Dec 2025 → Aug 2026, 244 days) | **−15.78%** | −0.64% · max DD 3.14% | **−0.14% · max DD 0.61%** |
 | COVID crash (Oct 2019 → Jun 2020, 274 days) | +14.85% | +10.09% · max DD 6.65% | **+19.31% · max DD 7.3% · Sharpe 0.84** |
 
-The trailing engine was stress-tested separately: tight trails alone lifted the COVID window from +9.7% to +15.2% with zero bear-window penalty; loose trails gave profits back (+6.8%). Every run: reconciliation CLEAN, audit chain intact, live gate stayed shut. Two hardening items surfaced (ExitManager crashes on an empty `partials` list; the paper wire stack only supports protective stops for long positions) — tracked as pre-live fixes, not gate items.
+The trailing engine was stress-tested separately: tight trails alone lifted the COVID window from +9.7% to +15.2% with zero bear-window penalty; loose trails gave profits back (+6.8%). Every run: reconciliation CLEAN, audit chain intact, live gate stayed shut. Two hardening items surfaced (ExitManager crashed on an empty `partials` list; the paper wire stack hard-coded SELL protective stops) — **both fixed with regression tests** (`tests/unit/test_empty_partials_and_short_stops.py`). India-leg shorts still need direction threaded through the exit adapters (future work).
 
-## The bug ledger — what five layers of testing each caught
+## The bug ledger — what six layers of testing each caught
 
 Every layer found bugs the previous layer could not. All fixed, all regression-locked:
 
@@ -66,6 +67,7 @@ Every layer found bugs the previous layer could not. All fixed, all regression-l
 | **Integration test** (full stack vs paper broker) | fractional partial quantities (NSE integer rule) · **stop-hit double-sell** |
 | **Multi-day simulation** | crypto lots routed down the India integer-only stop path → CompositeStopAdapter |
 | **Adversarial suite** | NaN/inf accepted by the sizer (NaN-quantity orders) · **corrupt negative VaR turned the headroom *reducer* into a 51× size *booster*** · silent NaN costs · corrupt bars moving stops · poison ticks poisoning anomaly baselines |
+| **E2E + live-browser UI sweep** (Aug 2026) | **cockpit role probe POSTed `/control/pause_entries` — typing an operator token silently PAUSED live entries** (now side-effect-free GET `/whoami`) · gateway `/state` omitted caller role, so operator controls (kill switch, approvals) never rendered against the real gateway — demo-mode-only · XSS: news-derived event text interpolated into `innerHTML` unescaped · **"Resume entries" (safe-start step 7) had no button in either cockpit** · `localStorage` crash killed the SPA in private-browsing/sandboxed contexts |
 
 ## The road to live
 
