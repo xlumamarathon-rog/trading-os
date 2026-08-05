@@ -24,7 +24,7 @@ const storage = (() => {
 })();
 
 const state = { token: storage.getItem("cockpit_token") || "", role: null,
-                equityHistory: [], lastState: null };
+                equityHistory: [], lastState: null, ackedEvents: new Set() };
 
 /* ---------------- gateway client (intents only) ---------------- */
 
@@ -56,10 +56,16 @@ const demo = {
     { id: "rule-7", label: "Rule: skip entries when GEX regime = amplify + severity ≥ 7 (holdout p=0.04)" },
     { id: "model-v3", label: "Model promotion v3: Brier 0.184→0.171, after-cost +6.2% on holdout" },
   ],
+  pnl_history: [
+    { date: "2026-06-30", equity: 1000000 }, { date: "2026-07-15", equity: 1004200 },
+    { date: "2026-07-31", equity: 1002340 }, { date: "2026-08-04", equity: 1006100 },
+  ],
+  config_view: { risk_limits: { max_risk_per_trade_pct: 0.01, max_position_pct: 0.05 },
+                 exit_manager: { breakeven_at_r: 1.0, never_widen_stop: true } },
   trades: [
-    { symbol: "RELIANCE", direction: "buy", realized_r: 1.8, reason: "trail_stop", mfe_captured_pct: 78.3 },
-    { symbol: "BTCUSD", direction: "sell", realized_r: -0.9, reason: "stop_hit", mfe_captured_pct: 0.0 },
-    { symbol: "EURUSD", direction: "buy", realized_r: 0.4, reason: "time_stop_no_progress", mfe_captured_pct: 31.0 },
+    { symbol: "RELIANCE", direction: "buy", realized_r: 1.8, reason: "trail_stop", mfe_captured_pct: 78.3, sleeve: "tsmom_f" },
+    { symbol: "BTCUSD", direction: "sell", realized_r: -0.9, reason: "stop_hit", mfe_captured_pct: 0.0, sleeve: "tsmom_f" },
+    { symbol: "EURUSD", direction: "buy", realized_r: 0.4, reason: "time_stop_no_progress", mfe_captured_pct: 31.0, sleeve: "accurate" },
   ],
   events: [
     { t: "10:42:11", m: "anomaly_guard: velocity_5s trigger NIFTY — entries paused 15m" },
@@ -77,6 +83,8 @@ function demoApi(path, opts) {
   }
   if (path === "/approvals") return Promise.resolve(demo.approvals);
   if (path === "/trades") return Promise.resolve(demo.trades);
+  if (path === "/pnl_history") return Promise.resolve(demo.pnl_history);
+  if (path === "/config") return Promise.resolve(demo.config_view);
   if (path === "/control/kill") { demo.halted = true; return Promise.resolve({ ok: true }); }
   if (path === "/control/unlock") { demo.halted = false; return Promise.resolve({ halted: false }); }
   if (path.startsWith("/control/approve/")) {
@@ -131,8 +139,13 @@ function render(s) {
     <td>${(p.mfe_r ?? 0).toFixed(1)}R</td></tr>`).join("")
     || `<tr><td colspan="8" class="sub">no open positions</td></tr>`;
 
-  $("events").innerHTML = (s.events || []).map(e =>
-    `<div class="row"><span class="t">${esc(e.t)}</span><span>${esc(e.m)}</span></div>`).join("");
+  $("events").innerHTML = (s.events || [])
+    .filter(e => !state.ackedEvents.has(`${e.t}|${e.m}`))
+    .map(e => `<div class="row"><span class="t">${esc(e.t)}</span><span>${esc(e.m)}</span>
+      <button class="ghost small ack" data-k="${esc(`${e.t}|${e.m}`)}">✓</button></div>`).join("")
+    || `<div class="sub">no unacknowledged events</div>`;
+  document.querySelectorAll(".ack").forEach(btn =>
+    btn.addEventListener("click", () => { state.ackedEvents.add(btn.dataset.k); render(state.lastState); }));
 
   const canResume = state.role === "operator" && !s.halted;
   $("resume-btn").classList.toggle("hidden", !canResume);
@@ -170,6 +183,50 @@ async function renderBlotter() {
     <td class="${(t.realized_r ?? 0) >= 0 ? "pos" : "neg"}">${(t.realized_r ?? 0).toFixed(2)}R</td>
     <td>${esc(t.reason)}</td><td>${esc(t.mfe_captured_pct ?? "")}</td></tr>`).join("")
     || `<tr><td colspan="5" class="sub">no closed trades yet</td></tr>`;
+}
+
+async function renderPnlPanels() {
+  // monthly P&L rollup from daily equity closes
+  const hist = await api("/pnl_history").catch(() => []);
+  const byMonth = new Map();
+  for (const p of hist || []) {
+    const m = p.date.slice(0, 7);
+    if (!byMonth.has(m)) byMonth.set(m, { first: p.equity, last: p.equity });
+    byMonth.get(m).last = p.equity;
+  }
+  let prevEnd = null;
+  const rows = [...byMonth.entries()].map(([m, v]) => {
+    const start = prevEnd ?? v.first;
+    const pnl = v.last - start, ret = start ? (pnl / start) * 100 : 0;
+    prevEnd = v.last;
+    return `<tr><td>${esc(m)}</td>
+      <td class="${pnl >= 0 ? "pos" : "neg"}">${pnl >= 0 ? "+" : ""}${fmtMoney(pnl).replace("₹-", "-₹")}</td>
+      <td class="${pnl >= 0 ? "pos" : "neg"}">${ret.toFixed(2)}%</td>
+      <td>${fmtMoney(v.last)}</td></tr>`;
+  });
+  $("pnl-monthly").querySelector("tbody").innerHTML =
+    rows.join("") || `<tr><td colspan="4" class="sub">no history yet</td></tr>`;
+
+  // sleeve attribution from the blotter
+  const trades = await api("/trades").catch(() => []);
+  const agg = new Map();
+  for (const t of trades || []) {
+    const k = t.sleeve || "unattributed";
+    const a = agg.get(k) || { r: 0, n: 0, w: 0 };
+    a.r += t.realized_r ?? 0; a.n += 1; if ((t.realized_r ?? 0) > 0) a.w += 1;
+    agg.set(k, a);
+  }
+  $("sleeves").innerHTML = [...agg.entries()].map(([k, a]) =>
+    `<div class="row"><span>${esc(k)}</span>
+     <span class="${a.r >= 0 ? "pos" : "neg"}">${a.r >= 0 ? "+" : ""}${a.r.toFixed(2)}R</span>
+     <span class="sub">${a.n} trades · ${a.n ? Math.round((a.w / a.n) * 100) : 0}% win</span></div>`).join("")
+    || "—";
+}
+
+async function renderConfig() {
+  const cfg = await api("/config").catch(() => null);
+  // textContent (not innerHTML): config is data, never markup
+  $("config-view").textContent = cfg ? JSON.stringify(cfg, null, 2) : "unavailable";
 }
 
 async function renderApprovals() {
@@ -263,8 +320,11 @@ async function boot() {
   tick();
   renderApprovals();
   renderBlotter();
+  renderPnlPanels();
+  renderConfig();
   setInterval(tick, POLL_MS);
   setInterval(renderBlotter, POLL_MS * 4);
+  setInterval(renderPnlPanels, POLL_MS * 10);
 }
 
 boot();

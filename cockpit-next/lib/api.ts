@@ -47,6 +47,8 @@ export const api = {
       body: JSON.stringify({ reason }) }),
   whoami: (token: string): Promise<{ role: string }> => req('/whoami', token),
   trades: (token: string): Promise<any[]> => req('/trades', token),
+  pnlHistory: (token: string): Promise<any[]> => req('/pnl_history', token),
+  configView: (token: string): Promise<any> => req('/config', token),
   approve: (token: string, id: string) =>
     req(`/control/approve/${id}`, token, { method: 'POST', body: '{}' }),
 };

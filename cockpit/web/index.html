@@ -86,9 +86,32 @@
     </table>
   </section>
 
-  <!-- row 5: events -->
+  <!-- row 5: P&L calendar + sleeve attribution -->
+  <section class="control-row">
+    <div class="card grow">
+      <h3>P&amp;L calendar <span class="sub">(monthly, from daily equity closes)</span></h3>
+      <table id="pnl-monthly">
+        <thead><tr><th>Month</th><th>P&amp;L</th><th>Return</th><th>End equity</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="card grow">
+      <h3>Sleeve attribution <span class="sub">(realized R by strategy)</span></h3>
+      <div id="sleeves" class="list mono">—</div>
+    </div>
+  </section>
+
+  <!-- row 6: running config (read-only) -->
   <section class="card">
-    <h3>Event feed <span class="sub">(anomalies · regime shifts · audit)</span></h3>
+    <details>
+      <summary><b>Running config</b> <span class="sub">(sanitized, read-only — what the machine believes)</span></summary>
+      <pre id="config-view" class="mono" style="overflow-x:auto"></pre>
+    </details>
+  </section>
+
+  <!-- row 7: events -->
+  <section class="card">
+    <h3>Event feed <span class="sub">(anomalies · regime shifts · audit · click ✓ to acknowledge)</span></h3>
     <div id="events" class="list mono"></div>
   </section>
 </main>

@@ -35,6 +35,8 @@ def create_gateway(
     approve_fn: Optional[Callable] = None,     # (approval_id, actor) -> None
     resume_entries_fn: Optional[Callable] = None,  # (actor) -> None — safe-start release
     trades_fn: Optional[Callable] = None,      # -> recent closed trades (blotter)
+    pnl_history_fn: Optional[Callable] = None,  # -> [{date, equity}] daily closes
+    config_view_fn: Optional[Callable] = None,  # -> SANITIZED running config dict
     ui_dir: Optional[str] = "cockpit/web",     # M45 SPA (zero-build, static)
 ) -> FastAPI:
     app = FastAPI(title="Trading OS Cockpit Gateway", docs_url=None, redoc_url=None)
@@ -96,6 +98,17 @@ def create_gateway(
         """Trade blotter (viewer+): recent closed trades with R, exit reason,
         MFE captured — the operator's ground-truth view of exit quality."""
         return await trades_fn() if trades_fn else []
+
+    @app.get("/pnl_history")
+    async def pnl_history(actor: dict = Depends(authed)):
+        """Daily equity closes (viewer+) — feeds the P&L calendar."""
+        return await pnl_history_fn() if pnl_history_fn else []
+
+    @app.get("/config")
+    async def config_view(actor: dict = Depends(authed)):
+        """SANITIZED running config (viewer+). The provider owns redaction —
+        secrets must never reach this endpoint."""
+        return await config_view_fn() if config_view_fn else {}
 
     # ---------- control side (operator only, audited) ----------
 
