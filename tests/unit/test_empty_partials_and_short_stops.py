@@ -20,7 +20,10 @@ from src.exits.exit_manager import ExitManager
 from src.ops.paper_server import create_paper_server
 
 CFG = load_config("config/master.yaml")
-EXIT_CFG = CFG.model_extra["exit_manager"]
+# flat exit mechanics only — per-leg overrides are covered in
+# test_per_leg_exit_configs.py
+EXIT_CFG = {k: v for k, v in CFG.model_extra["exit_manager"].items()
+            if not k.endswith("_by_leg")}
 TREND = {"trend_state": "STRONG_TREND", "vol_regime": "NORMAL"}
 
 

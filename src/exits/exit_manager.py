@@ -59,6 +59,7 @@ class ManagedPosition:
     remaining_qty: float = 0.0
     lot_size: float = 1.0
     opened_at: float = field(default_factory=time.time)
+    profit_locked: bool = False    # profit mark reached — tight-trail mode
     telemetry: Optional[ExitTelemetry] = None
 
     @property
@@ -128,12 +129,34 @@ class ExitManager:
         move = (price - pos.entry) if pos.is_long else (pos.entry - price)
         return move / pos.r_value if pos.r_value else 0.0
 
+    # ---------- per-leg config overrides (Aug 2026) ----------
+    # Different legs want different exit personalities: replay evidence shows
+    # India rewards tight profit-locking while crypto trends reward a full
+    # runner. `<key>_by_leg.<leg>` overrides the flat `<key>` when present;
+    # absent legs fall back to the global value (fully backward compatible).
+
+    def _trail_map(self, leg: str) -> dict:
+        return self.cfg.get("k_trail_by_regime_by_leg", {}).get(
+            leg, self.cfg["k_trail_by_regime"])
+
+    def _partials_for(self, leg: str) -> list:
+        by_leg = self.cfg.get("partials_by_leg", {})
+        return by_leg[leg] if leg in by_leg else self.cfg["partials"]
+
+    def _profit_lock_for(self, leg: str):
+        """Optional PROFIT-MARK exit mode: {at_r, lock_r, trail_k}. When the
+        trade reaches at_r·R, the stop ratchets to entry ± lock_r·R (the
+        profit is banked) and the position switches to a TIGHT trail_k×ATR
+        trail — riding further upside without giving the mark back."""
+        by_leg = self.cfg.get("profit_lock_by_leg", {})
+        return by_leg.get(leg, self.cfg.get("profit_lock"))
+
     def _k_trail(self, regime: dict, event_minutes: Optional[float], leg: str,
                  crypto_weekend: bool) -> float:
-        k = float(self.cfg["k_trail_by_regime"].get(regime.get("trend_state", "RANGE"),
-                                                    self.cfg["k_trail_by_regime"]["RANGE"]))
+        trail = self._trail_map(leg)
+        k = float(trail.get(regime.get("trend_state", "RANGE"), trail["RANGE"]))
         if regime.get("vol_regime") == "SHOCK":
-            k = float(self.cfg["k_trail_by_regime"]["SHOCK"])
+            k = float(trail["SHOCK"])
         if event_minutes is not None and event_minutes <= float(self.cfg["event_tighten_minutes"]):
             k /= 2.0
         if crypto_weekend and leg == "mt5_crypto" and self.cfg["crypto_weekend_policy"] == "tighten":
@@ -228,7 +251,7 @@ class ExitManager:
             return ["exit:time_stop"]
 
         r_now = self._r_multiple(pos, close)
-        partial_cfgs = self.cfg["partials"]
+        partial_cfgs = self._partials_for(pos.leg)
 
         # 4. breakeven + partial 1 (partials may legitimately be empty:
         #    breakeven ratchet + trailing still apply, runner keeps full size)
@@ -251,9 +274,25 @@ class ExitManager:
                 actions.append("partial_2")
             pos.state = "TRAILING"
 
-        # 6. chandelier trail (runner)
+        # 5b. PROFIT MARK: bank lock_r·R once at_r·R is reached, then ride
+        #     further upside on a tight trail instead of exiting flat-out
+        lock = self._profit_lock_for(pos.leg)
+        if lock and not pos.profit_locked and pos.state != "EXITED" \
+                and r_now >= float(lock["at_r"]):
+            lock_px = (pos.entry + float(lock["lock_r"]) * pos.r_value if pos.is_long
+                       else pos.entry - float(lock["lock_r"]) * pos.r_value)
+            if await self._ratchet_stop(pos, lock_px):
+                actions.append(f"profit_lock:{lock['lock_r']:g}R")
+            pos.profit_locked = True
+            if pos.state == "RISK_ON":
+                pos.state = "BREAKEVEN"
+
+        # 6. chandelier trail (runner) — tight trail once the profit is locked
         if pos.state in ("BREAKEVEN", "TRAILING"):
-            k = self._k_trail(regime, event_minutes, pos.leg, crypto_weekend)
+            if pos.profit_locked and lock:
+                k = float(lock.get("trail_k", 0.75))
+            else:
+                k = self._k_trail(regime, event_minutes, pos.leg, crypto_weekend)
             chandelier = (pos.extreme - k * pos.atr) if pos.is_long else (pos.extreme + k * pos.atr)
             if await self._ratchet_stop(pos, chandelier):
                 actions.append(f"trail:{k:g}xATR")

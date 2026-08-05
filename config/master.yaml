@@ -95,6 +95,18 @@ exit_manager:                         # MODULE 35
   partials: [{at_r: 1.0, pct: 33}, {at_r: 2.0, pct: 33}]
   k_sl_initial: {india: 2.0, mt5_forex: 2.0, mt5_crypto: 3.0}
   k_trail_by_regime: {STRONG_TREND: 3.0, WEAK_TREND: 2.0, RANGE: 1.25, SHOCK: 0.75}
+  # Per-leg exit personalities (Aug 2026 replay evidence, see PR):
+  #   india      — tight profit-locking: 6m 2026 bear +1.21%/MDD 1.02 vs
+  #                default exits; wider trails gave profits back in every test
+  #   mt5_crypto — full runner (no partials): +2.92% vs +1.54% on identical
+  #                entries, LOWER drawdown; walk-forward 10/11 segments (2020-26)
+  #   mt5_forex  — no override: stays on the global defaults (weak evidence)
+  k_trail_by_regime_by_leg:
+    india: {STRONG_TREND: 2.0, WEAK_TREND: 1.5, RANGE: 1.0, SHOCK: 0.5}
+    mt5_crypto: {STRONG_TREND: 3.0, WEAK_TREND: 2.0, RANGE: 1.25, SHOCK: 0.75}
+  partials_by_leg:
+    india: [{at_r: 1.0, pct: 50}]
+    mt5_crypto: []
   min_ratchet_step_atr: 0.25
   max_bars_no_progress: {india: 20, mt5_forex: 30, mt5_crypto: 16}
   event_tighten_minutes: 30
