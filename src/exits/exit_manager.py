@@ -128,12 +128,26 @@ class ExitManager:
         move = (price - pos.entry) if pos.is_long else (pos.entry - price)
         return move / pos.r_value if pos.r_value else 0.0
 
+    # ---------- per-leg config overrides (Aug 2026) ----------
+    # Different legs want different exit personalities: replay evidence shows
+    # India rewards tight profit-locking while crypto trends reward a full
+    # runner. `<key>_by_leg.<leg>` overrides the flat `<key>` when present;
+    # absent legs fall back to the global value (fully backward compatible).
+
+    def _trail_map(self, leg: str) -> dict:
+        return self.cfg.get("k_trail_by_regime_by_leg", {}).get(
+            leg, self.cfg["k_trail_by_regime"])
+
+    def _partials_for(self, leg: str) -> list:
+        by_leg = self.cfg.get("partials_by_leg", {})
+        return by_leg[leg] if leg in by_leg else self.cfg["partials"]
+
     def _k_trail(self, regime: dict, event_minutes: Optional[float], leg: str,
                  crypto_weekend: bool) -> float:
-        k = float(self.cfg["k_trail_by_regime"].get(regime.get("trend_state", "RANGE"),
-                                                    self.cfg["k_trail_by_regime"]["RANGE"]))
+        trail = self._trail_map(leg)
+        k = float(trail.get(regime.get("trend_state", "RANGE"), trail["RANGE"]))
         if regime.get("vol_regime") == "SHOCK":
-            k = float(self.cfg["k_trail_by_regime"]["SHOCK"])
+            k = float(trail["SHOCK"])
         if event_minutes is not None and event_minutes <= float(self.cfg["event_tighten_minutes"]):
             k /= 2.0
         if crypto_weekend and leg == "mt5_crypto" and self.cfg["crypto_weekend_policy"] == "tighten":
@@ -228,7 +242,7 @@ class ExitManager:
             return ["exit:time_stop"]
 
         r_now = self._r_multiple(pos, close)
-        partial_cfgs = self.cfg["partials"]
+        partial_cfgs = self._partials_for(pos.leg)
 
         # 4. breakeven + partial 1 (partials may legitimately be empty:
         #    breakeven ratchet + trailing still apply, runner keeps full size)

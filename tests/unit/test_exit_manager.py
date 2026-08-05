@@ -9,7 +9,10 @@ from src.core.config_loader import load_config
 from src.exits.exit_manager import ExitManager, StopWidenAttempt
 
 CFG = load_config("config/master.yaml")
-EXIT_CFG = CFG.model_extra["exit_manager"]
+# These tests validate the FLAT exit mechanics; per-leg overrides have their
+# own suite (test_per_leg_exit_configs.py), so strip them here.
+EXIT_CFG = {k: v for k, v in CFG.model_extra["exit_manager"].items()
+            if not k.endswith("_by_leg")}
 
 TREND = {"trend_state": "STRONG_TREND", "vol_regime": "NORMAL"}
 RANGE_ = {"trend_state": "RANGE", "vol_regime": "NORMAL"}
