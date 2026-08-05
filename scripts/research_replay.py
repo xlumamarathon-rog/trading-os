@@ -77,6 +77,14 @@ DEFAULT_SIGMA = {"india": 0.016, "mt5_forex": 0.005, "mt5_crypto": 0.035}
 # GIVEBACK_PCT below its rolling 20-session high (open positions keep their
 # stops/trails — this only stops adding risk during a losing cluster).
 GIVEBACK_PCT = float(os.environ.get("GIVEBACK_PCT", "0"))   # e.g. 0.02 = 2%
+
+# RESEARCH-ONLY risk override (never touches production config): lets the lab
+# quantify what higher per-trade risk does to return AND drawdown.
+_risk_override = os.environ.get("RISK_PCT")
+if _risk_override:
+    object.__setattr__(CFG.risk_limits, "max_risk_per_trade_pct", float(_risk_override))
+    object.__setattr__(CFG.risk_limits, "max_position_pct",
+                       max(CFG.risk_limits.max_position_pct, float(_risk_override) * 5))
 TICKS_PER_BAR = 24
 SUB_BAR = 6
 STARTING_CASH = float(os.environ.get("STARTING_CASH", "1000000"))
@@ -389,7 +397,9 @@ async def run():
         config=CFG, kill_switch=ks, anomaly_guard=guard,
         margin_checker=MarginChecker(CFG.risk_limits, india_api=PaperMarginAPI(broker),
                                      mt5_api=PaperMarginAPI(broker)),
-        connections=conns, redis=redis, balance_fn=lambda: STARTING_CASH,
+        # COMPOUNDING: size each trade off LIVE equity, not starting cash —
+        # wins raise future position sizes, losses shrink them (real behavior)
+        connections=conns, redis=redis, balance_fn=lambda: broker.equity(),
         signal_valid_fn=lambda s, d: True, band_check_fn=lambda s, p: True,
         session_open_fn=lambda leg: True,
         audit_fn=lambda row: audit.append({"type": "order", **row}))

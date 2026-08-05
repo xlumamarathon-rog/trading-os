@@ -82,3 +82,50 @@ async def test_legacy_flat_config_still_works():
     mgr = ExitManager(flat, MockStopAdapter())
     assert mgr._trail_map("india") == flat["k_trail_by_regime"]
     assert mgr._partials_for("mt5_crypto") == flat["partials"]
+
+
+# ---------- profit-mark (target-then-trail) mode ----------
+
+def lock_cfg():
+    cfg = {k: v for k, v in EXIT_CFG.items()
+           if k not in ("k_trail_by_regime_by_leg", "partials_by_leg")}
+    cfg["partials"] = []
+    cfg["profit_lock"] = {"at_r": 2.0, "lock_r": 1.0, "trail_k": 0.75}
+    return cfg
+
+
+async def test_profit_mark_locks_1r_then_trails_tight():
+    adapter = MockStopAdapter()
+    mgr = ExitManager(lock_cfg(), adapter)
+    pos = await mgr.attach(symbol="X", direction="buy", entry=100.0, qty=100,
+                           atr=1.5, leg="india")                   # R = 3.0
+    # price runs to +2R (106): profit mark hit -> stop banks +1R (103)
+    actions = await mgr.on_bar("X", 106.5, 105.5, 106.2, TREND)
+    assert any(a.startswith("profit_lock:1") for a in actions)
+    assert pos.profit_locked and pos.stop >= 103.0
+    # keeps running: tight 0.75xATR trail follows the extreme upward
+    actions = await mgr.on_bar("X", 110.0, 109.0, 109.8, TREND)
+    assert any(a == "trail:0.75xATR" for a in actions)
+    assert pos.stop >= 110.0 - 0.75 * 1.5 - 1e-9
+    # reversal through the trail exits with the profit KEPT (>= locked 1R)
+    await mgr.on_bar("X", 109.0, 100.5, 100.6, TREND)
+    assert pos.state == "EXITED"
+    assert pos.telemetry.realized_r >= 1.0
+
+
+async def test_profit_mark_short_side_symmetry():
+    mgr = ExitManager(lock_cfg(), MockStopAdapter())
+    pos = await mgr.attach(symbol="S", direction="sell", entry=100.0, qty=100,
+                           atr=1.5, leg="india")                   # R=3, stop 103
+    await mgr.on_bar("S", 94.5, 93.5, 93.8, TREND)                 # -2R hit for short
+    assert pos.profit_locked and pos.stop <= 97.0                  # locked +1R
+
+
+async def test_no_profit_lock_config_means_no_behavior_change():
+    cfg = {k: v for k, v in EXIT_CFG.items()
+           if k not in ("k_trail_by_regime_by_leg", "partials_by_leg")}
+    mgr = ExitManager(cfg, MockStopAdapter())
+    pos = await mgr.attach(symbol="Y", direction="buy", entry=100.0, qty=100,
+                           atr=1.5, leg="india")
+    await mgr.on_bar("Y", 106.5, 105.5, 106.2, TREND)
+    assert pos.profit_locked is False                              # feature off
