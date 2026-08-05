@@ -79,7 +79,7 @@ DEFAULT_SIGMA = {"india": 0.016, "mt5_forex": 0.005, "mt5_crypto": 0.035}
 GIVEBACK_PCT = float(os.environ.get("GIVEBACK_PCT", "0"))   # e.g. 0.02 = 2%
 TICKS_PER_BAR = 24
 SUB_BAR = 6
-STARTING_CASH = 1_000_000.0
+STARTING_CASH = float(os.environ.get("STARTING_CASH", "1000000"))
 
 
 def load_real():
