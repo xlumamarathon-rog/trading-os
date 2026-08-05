@@ -140,3 +140,28 @@ async def test_sl_zero_clears_stop_by_cancelling_order():
     assert r.status_code == 200
     assert broker.open_orders == {}                   # cleared, nothing can insta-fire
     assert broker.on_tick("BTCUSD", 120.0) == []      # and nothing triggers
+
+
+async def test_partial_close_syncs_stop_qty_no_phantom_short():
+    """Regression (walk-forward sweep find): after a PARTIAL close on an MT5
+    leg, the emulated position-riding SL must cover only what REMAINS. The
+    old behavior kept the ORIGINAL quantity on the resting stop, so a later
+    trigger oversold and flipped the book into a phantom short."""
+    broker, client = make_client()
+    broker.on_tick("BTCUSD", 100.0)
+    await client.post("/order", json={"symbol": "BTCUSD", "direction": "buy",
+                                      "qty": 2, "client_order_id": "P1"})
+    r = await client.post("/position/stop", json={"symbol": "BTCUSD",
+                                                  "lots": 2, "sl": 90.0})
+    pid = r.json()["position_id"]
+
+    # partial close half at market (what ExitManager's _take_partial does) ...
+    await client.post("/position/close", json={"symbol": "BTCUSD", "lots": 1})
+    assert broker.positions["BTCUSD"]["qty"] == pytest.approx(1)
+    # ... followed by its replace_stop -> /position/modify on the same id
+    await client.post("/position/modify", json={"position_id": pid, "sl": 92.0})
+    assert list(broker.open_orders.values())[0]["quantity"] == pytest.approx(1)
+
+    # adverse move triggers the stop: position must go EXACTLY flat
+    broker.on_tick("BTCUSD", 80.0)
+    assert broker.positions["BTCUSD"]["qty"] == pytest.approx(0)   # no phantom short

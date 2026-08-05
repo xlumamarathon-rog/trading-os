@@ -112,6 +112,15 @@ def create_paper_server(broker: PaperBroker) -> FastAPI:
             result = broker.cancel_order(body["position_id"])
         else:
             result = broker.modify_order(body["position_id"], sl)
+            # MT5 semantics: the SL rides the POSITION. After a partial close
+            # the protective stop covers exactly what REMAINS — never the
+            # original quantity. Without this sync the emulated stop oversold
+            # on trigger, flipping the book into a phantom short.
+            order = broker.open_orders.get(body["position_id"])
+            if order is not None:
+                pos_qty = abs(broker.positions.get(order["symbol"], {}).get("qty", 0.0))
+                if pos_qty > 0:
+                    order["quantity"] = min(order["quantity"], pos_qty)
         if result.get("status") != "success":
             raise HTTPException(status_code=400, detail=result.get("message"))
         return {"ok": True}

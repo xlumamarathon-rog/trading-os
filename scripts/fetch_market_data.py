@@ -17,8 +17,11 @@ import sys
 import urllib.request
 from pathlib import Path
 
-WARMUP_START = "2025-11-03"        # real lead-in for indicator warmup
-REPORT_FROM = "2026-02-05"         # last 6 months (today: 2026-08-05)
+import os
+
+WARMUP_START = os.environ.get("WARMUP_START", "2025-11-03")   # real lead-in
+REPORT_FROM = os.environ.get("REPORT_FROM", "2026-02-05")     # metrics window
+OUT_SUFFIX = os.environ.get("OUT_SUFFIX", "6m")
 
 MARKETS = {
     "india": {
@@ -84,7 +87,7 @@ def window_stats(bars: list[dict], report_from: str) -> dict:
 
 def main(market: str) -> None:
     today = dt.date.today().isoformat()
-    out = Path(f"data/market_{market}_6m")
+    out = Path(f"data/market_{market}_{OUT_SUFFIX}")
     out.mkdir(parents=True, exist_ok=True)
     meta, symbols = {}, {}
     for sym, cfg in MARKETS[market].items():
