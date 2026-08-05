@@ -1,0 +1,26 @@
+{
+ "symbols": {
+  "EURUSD": {
+   "leg": "mt5_forex",
+   "lot": 1000,
+   "adv": 1000000000000.0,
+   "half_spread": 5e-05,
+   "commission_pct": 3.5e-05
+  },
+  "GBPUSD": {
+   "leg": "mt5_forex",
+   "lot": 1000,
+   "adv": 600000000000.0,
+   "half_spread": 7e-05,
+   "commission_pct": 3.5e-05
+  },
+  "USDJPY": {
+   "leg": "mt5_forex",
+   "lot": 1000,
+   "adv": 800000000000.0,
+   "half_spread": 0.008,
+   "commission_pct": 3.5e-05
+  }
+ },
+ "report_from": "2026-02-05"
+}

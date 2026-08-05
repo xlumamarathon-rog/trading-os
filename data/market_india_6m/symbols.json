@@ -1,0 +1,20 @@
+{
+ "symbols": {
+  "RELIANCE": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 8000000
+  },
+  "TCS": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 2500000
+  },
+  "HDFCBANK": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 12000000
+  }
+ },
+ "report_from": "2026-02-05"
+}

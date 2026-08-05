@@ -1,0 +1,29 @@
+{
+ "RELIANCE": {
+  "bars_total": 189,
+  "bars_in_window": 124,
+  "window": "2026-02-05 \u2192 2026-08-04",
+  "start_px": 1443.400024,
+  "end_px": 1290.900024,
+  "period_return_pct": -10.57,
+  "real_max_drawdown_pct": 14.9
+ },
+ "TCS": {
+  "bars_total": 189,
+  "bars_in_window": 124,
+  "window": "2026-02-05 \u2192 2026-08-04",
+  "start_px": 2991.5,
+  "end_px": 2460.0,
+  "period_return_pct": -17.77,
+  "real_max_drawdown_pct": 33.92
+ },
+ "HDFCBANK": {
+  "bars_total": 189,
+  "bars_in_window": 124,
+  "window": "2026-02-05 \u2192 2026-08-04",
+  "start_px": 949.700012,
+  "end_px": 742.0,
+  "period_return_pct": -21.87,
+  "real_max_drawdown_pct": 23.49
+ }
+}

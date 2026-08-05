@@ -1,0 +1,20 @@
+{
+ "BTCUSD": {
+  "bars_total": 275,
+  "bars_in_window": 181,
+  "window": "2026-02-05 \u2192 2026-08-05",
+  "start_px": 62702.097656,
+  "end_px": 64260.171875,
+  "period_return_pct": 2.48,
+  "real_max_drawdown_pct": 29.7
+ },
+ "ETHUSD": {
+  "bars_total": 275,
+  "bars_in_window": 181,
+  "window": "2026-02-05 \u2192 2026-08-05",
+  "start_px": 1821.683105,
+  "end_px": 1869.97998,
+  "period_return_pct": 2.65,
+  "real_max_drawdown_pct": 37.78
+ }
+}

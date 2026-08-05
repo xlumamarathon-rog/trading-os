@@ -1,0 +1,19 @@
+{
+ "symbols": {
+  "BTCUSD": {
+   "leg": "mt5_crypto",
+   "lot": 0.01,
+   "adv": 5000000000.0,
+   "half_spread": 17.5,
+   "commission_pct": 0.0
+  },
+  "ETHUSD": {
+   "leg": "mt5_crypto",
+   "lot": 0.1,
+   "adv": 2000000000.0,
+   "half_spread": 1.2,
+   "commission_pct": 0.0
+  }
+ },
+ "report_from": "2026-02-05"
+}

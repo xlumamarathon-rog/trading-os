@@ -1,0 +1,29 @@
+{
+ "EURUSD": {
+  "bars_total": 196,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-05",
+  "start_px": 1.180164,
+  "end_px": 1.153669,
+  "period_return_pct": -2.25,
+  "real_max_drawdown_pct": 4.86
+ },
+ "GBPUSD": {
+  "bars_total": 196,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-05",
+  "start_px": 1.364461,
+  "end_px": 1.345334,
+  "period_return_pct": -1.4,
+  "real_max_drawdown_pct": 3.95
+ },
+ "USDJPY": {
+  "bars_total": 196,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-05",
+  "start_px": 156.917007,
+  "end_px": 157.662994,
+  "period_return_pct": 0.48,
+  "real_max_drawdown_pct": 5.25
+ }
+}

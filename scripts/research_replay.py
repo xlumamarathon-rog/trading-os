@@ -60,6 +60,18 @@ META = {
     "BTCUSD": {"leg": "mt5_crypto", "lot": 0.01, "adv": 5e9,
                "half_spread": 17.5, "commission_pct": 0.0},
 }
+
+# Datasets may carry their own symbol universe + report window
+# (see scripts/fetch_market_data.py). REPORT_FROM slices the metrics to the
+# report window while indicators warm up on the real lead-in bars.
+REPORT_FROM = os.environ.get("REPORT_FROM", "")
+_symbols_file = DATA_DIR / "symbols.json"
+if _symbols_file.exists():
+    _spec = json.loads(_symbols_file.read_text())
+    META = _spec["symbols"]
+    REPORT_FROM = REPORT_FROM or _spec.get("report_from", "")
+
+DEFAULT_SIGMA = {"india": 0.016, "mt5_forex": 0.005, "mt5_crypto": 0.035}
 TICKS_PER_BAR = 24
 SUB_BAR = 6
 STARTING_CASH = 1_000_000.0
@@ -289,7 +301,7 @@ async def run():
         costs=CFG.execution_costs.india, impact=CFG.execution_costs.impact_model,
         starting_cash=STARTING_CASH,
         adv_map={s: m["adv"] for s, m in META.items()},
-        daily_sigma_map={"RELIANCE": 0.016, "EURUSD": 0.005, "BTCUSD": 0.035},
+        daily_sigma_map={s: DEFAULT_SIGMA.get(m["leg"], 0.02) for s, m in META.items()},
         mt5_cost_map={s: {"half_spread": m["half_spread"], "commission_pct": m["commission_pct"]}
                       for s, m in META.items() if "half_spread" in m})
     app = create_paper_server(broker)
@@ -383,7 +395,12 @@ async def run():
     rep = reconcile("research-final", internal, broker.tradebook(),
                     naked_positions=exit_mgr.naked_positions())
 
-    eq = [p["equity"] for p in equity_curve]
+    # metrics over the REPORT window only (indicators warmed on lead-in bars)
+    curve = [p for p in equity_curve if not REPORT_FROM or p["date"] >= REPORT_FROM]
+    if not curve:
+        curve = equity_curve
+    eq = [p["equity"] for p in curve]
+    base_equity = eq[0]
     peak, mdd = eq[0], 0.0
     for v in eq:
         peak = max(peak, v)
@@ -404,9 +421,10 @@ async def run():
     results = {
         "strategy_name": STRATEGY,
         "exit_overrides": EXIT_OVERRIDES,
-        "window": f"{all_dates[0]} → {all_dates[-1]} ({len(all_dates)} real market days)",
+        "window": (f"{curve[0]['date']} → {curve[-1]['date']} "
+                   f"({len(curve)} report days of {len(all_dates)} replayed)"),
         "final_equity": round(eq[-1], 2),
-        "return_pct": round((eq[-1] / STARTING_CASH - 1) * 100, 2),
+        "return_pct": round((eq[-1] / base_equity - 1) * 100, 2),
         "MAX_DRAWDOWN_pct": round(mdd * 100, 2),
         "sharpe_annualized": round(sharpe, 2),
         "buy_hold_equal_weight_return_pct": round(bh, 2),
