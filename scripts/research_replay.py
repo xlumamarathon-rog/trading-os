@@ -45,6 +45,7 @@ from src.ops.eod_reconciler import reconcile
 from src.ops.paper_report import advance_gate
 from src.ops.paper_server import create_paper_server
 from src.ops.persistence import JsonlAuditLog
+from src.core.budget_manager import BudgetManager
 from src.ops.session_guard import SessionGuard
 from src.risk.portfolio_heat import PortfolioHeatManager
 
@@ -94,6 +95,12 @@ if _risk_override:
 # back; DAY_LOSS_STOP cuts a bad day before the kill-switch has to.
 DAY_PROFIT_BANK = float(os.environ.get("DAY_PROFIT_BANK", "0"))  # e.g. 0.01 = +1%
 DAY_LOSS_STOP = float(os.environ.get("DAY_LOSS_STOP", "0"))      # e.g. 0.01 = -1%
+
+# RING-FENCED BUDGET (MODULE 55): the system trades ONLY this allocation.
+# Profit compounds INTO the budget; losses shrink it; below the floor, new
+# entries stop. 0 = whole account (feature off).
+BUDGET = float(os.environ.get("BUDGET", "0"))
+BUDGET_FLOOR_PCT = float(os.environ.get("BUDGET_FLOOR_PCT", "0.5"))
 TICKS_PER_BAR = 24
 SUB_BAR = 6
 STARTING_CASH = float(os.environ.get("STARTING_CASH", "1000000"))
@@ -237,13 +244,22 @@ async def run():
     exit_mgr = ExitManager(exit_cfg, CompositeStopAdapter(
         india_adapter=IndiaStopAdapter(conns.get_openalgo(), apikey="PAPER", algo_id="ALGO-PAPER-1"),
         mt5_adapter=Mt5StopAdapter(conns.get_mt5())), on_exit=on_exit)
+    budget = BudgetManager(BUDGET, min_floor_pct=BUDGET_FLOOR_PCT) if BUDGET > 0 else None
+    if budget:
+        budget.attach(broker.equity())
+
+    def tradable_balance():
+        eq = broker.equity()
+        return budget.effective(eq) if budget else eq
+
     router = OrderRouter(
         config=CFG, kill_switch=ks, anomaly_guard=guard,
         margin_checker=MarginChecker(CFG.risk_limits, india_api=PaperMarginAPI(broker),
                                      mt5_api=PaperMarginAPI(broker)),
-        # COMPOUNDING: size each trade off LIVE equity, not starting cash —
-        # wins raise future position sizes, losses shrink them (real behavior)
-        connections=conns, redis=redis, balance_fn=lambda: broker.equity(),
+        # COMPOUNDING: size each trade off LIVE tradable capital — the ring-
+        # fenced budget when set (profit grows it, loss shrinks it), else the
+        # whole account equity
+        connections=conns, redis=redis, balance_fn=tradable_balance,
         signal_valid_fn=lambda s, d: True, band_check_fn=lambda s, p: True,
         session_open_fn=lambda leg: True,
         audit_fn=lambda row: audit.append({"type": "order", **row}))
@@ -254,6 +270,7 @@ async def run():
     clock = 1_000_000.0
     equity_curve, entries, rejected = [], 0, {}
     throttled_days = heat_rejections = 0
+    budget_blocked_days = set()
     session_guard = SessionGuard(profit_bank_pct=DAY_PROFIT_BANK, loss_stop_pct=DAY_LOSS_STOP)
     heat_mgr = PortfolioHeatManager(max_heat_pct=float(os.environ.get("MAX_HEAT_PCT", "0.06")))
 
@@ -276,14 +293,17 @@ async def run():
 
             held = sym in exit_mgr.positions and exit_mgr.positions[sym].state != "EXITED"
             day_ok = session_guard.allows_new_entries(broker.equity())
-            direction = (None if held or not a or throttle or not day_ok
+            budget_ok = budget.entries_allowed(broker.equity())[0] if budget else True
+            if budget and not budget_ok:
+                budget_blocked_days.add(date)
+            direction = (None if held or not a or throttle or not day_ok or not budget_ok
                          else signal_fn(bars, i, regime))
             # portfolio heat gate (MODULE 46): refuse new risk when the book's
             # aggregate stop-loss exposure would exceed the cap
             if direction:
                 hc = heat_mgr.check(
-                    positions=exit_mgr.positions.values(), equity=broker.equity(),
-                    proposed_risk=broker.equity() * CFG.risk_limits.max_risk_per_trade_pct)
+                    positions=exit_mgr.positions.values(), equity=tradable_balance(),
+                    proposed_risk=tradable_balance() * CFG.risk_limits.max_risk_per_trade_pct)
                 if not hc.allowed:
                     heat_rejections += 1
                     direction = None
@@ -367,6 +387,8 @@ async def run():
         "days_banked": session_guard.state.days_banked if session_guard.state else 0,
         "days_loss_stopped": session_guard.state.days_loss_stopped if session_guard.state else 0,
         "heat_rejections": heat_rejections,
+        "budget": budget.snapshot(broker.equity()) if budget else None,
+        "budget_blocked_days": len(budget_blocked_days),
         "closed_trades": len(exits_log),
         "win_rate_pct": round(100 * len(wins) / len(exits_log), 1) if exits_log else None,
         "avg_realized_r": round(sum(e["realized_r"] for e in exits_log) / len(exits_log), 2) if exits_log else None,
