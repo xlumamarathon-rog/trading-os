@@ -53,6 +53,13 @@
         <button id="resume-go" class="ghost small">CONFIRM RESUME</button>
         <button id="resume-cancel" class="ghost small">cancel</button>
       </div>
+      <button id="pause-btn" class="ghost hidden">PAUSE ENTRIES</button>
+      <div id="pause-confirm" class="hidden">
+        <p>Stop taking NEW entries (open positions keep their stops):</p>
+        <input id="pause-reason" autocomplete="off" placeholder="reason (logged)">
+        <button id="pause-go" class="ghost small">CONFIRM PAUSE</button>
+        <button id="pause-cancel" class="ghost small">cancel</button>
+      </div>
     </div>
     <div class="card grow">
       <h3>Approvals inbox <span class="sub">(rules &amp; model promotions — human gate)</span></h3>
@@ -70,7 +77,16 @@
     </table>
   </section>
 
-  <!-- row 4: events -->
+  <!-- row 4: trade blotter -->
+  <section class="card">
+    <h3>Trade blotter <span class="sub">(closed trades · R realized · exit reason · MFE captured)</span></h3>
+    <table id="blotter">
+      <thead><tr><th>Symbol</th><th>Side</th><th>R</th><th>Exit reason</th><th>MFE cap %</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- row 5: events -->
   <section class="card">
     <h3>Event feed <span class="sub">(anomalies · regime shifts · audit)</span></h3>
     <div id="events" class="list mono"></div>

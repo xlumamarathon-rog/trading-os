@@ -72,11 +72,15 @@ async def main():
     async def approve_fn(aid, actor):
         approved.append((aid, actor))
 
+    async def trades_fn():
+        return [{"symbol": "X", "direction": "buy", "realized_r": 1.2,
+                 "reason": "trail_stop", "mfe_captured_pct": 70.0}]
+
     app = create_gateway(tokens={"VIEW1234": "viewer", "OPER5678": "operator"},
                          kill_switch=ks, audit_log=audit, snapshot_fn=snapshot,
                          pause_entries_fn=pause_fn, approvals_fn=approvals_fn,
                          approve_fn=approve_fn, resume_entries_fn=resume_fn,
-                         ui_dir="cockpit/web")
+                         trades_fn=trades_fn, ui_dir="cockpit/web")
     c = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://gw")
     V = {"Authorization": "Bearer VIEW1234"}
     O = {"Authorization": "Bearer OPER5678"}
@@ -91,6 +95,10 @@ async def main():
     check("viewer reads state", r.status_code == 200 and r.json()["halted"] is False)
     r = await c.get("/approvals", headers=V)
     check("viewer reads approvals", r.status_code == 200 and r.json()[0]["id"] == "AP-1")
+    r = await c.get("/trades", headers=V)
+    check("viewer reads trade blotter", r.status_code == 200 and r.json()[0]["realized_r"] == 1.2)
+    r = await c.get("/trades")
+    check("blotter requires auth -> 401", r.status_code == 401)
 
     # RBAC: viewer provably cannot control
     for path in ["/control/kill", "/control/unlock", "/control/pause_entries",

@@ -12,6 +12,7 @@ import ApprovalsInbox from '@/components/ApprovalsInbox';
 import WorkerHealthChips from '@/components/WorkerHealth';
 import EventFeed from '@/components/EventFeed';
 import GateProgress from '@/components/GateProgress';
+import TradeBlotter from '@/components/TradeBlotter';
 
 const fmt = (x: number) =>
   (x < 0 ? '-' : '') + '₹' + Math.abs(x).toLocaleString('en-IN', { maximumFractionDigits: 0 });
@@ -89,6 +90,7 @@ export default function Cockpit() {
           </section>
 
           <PositionsTable positions={state.positions} />
+          <TradeBlotter token={token} />
           <EventFeed events={state.events} />
         </main>
       )}

@@ -45,6 +45,8 @@ from src.ops.eod_reconciler import reconcile
 from src.ops.paper_report import advance_gate
 from src.ops.paper_server import create_paper_server
 from src.ops.persistence import JsonlAuditLog
+from src.ops.session_guard import SessionGuard
+from src.risk.portfolio_heat import PortfolioHeatManager
 
 STRATEGY = sys.argv[1] if len(sys.argv) > 1 else "baseline"
 DATA_DIR = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("data/real")
@@ -77,6 +79,21 @@ DEFAULT_SIGMA = {"india": 0.016, "mt5_forex": 0.005, "mt5_crypto": 0.035}
 # GIVEBACK_PCT below its rolling 20-session high (open positions keep their
 # stops/trails — this only stops adding risk during a losing cluster).
 GIVEBACK_PCT = float(os.environ.get("GIVEBACK_PCT", "0"))   # e.g. 0.02 = 2%
+
+# RESEARCH-ONLY risk override (never touches production config): lets the lab
+# quantify what higher per-trade risk does to return AND drawdown.
+_risk_override = os.environ.get("RISK_PCT")
+if _risk_override:
+    object.__setattr__(CFG.risk_limits, "max_risk_per_trade_pct", float(_risk_override))
+    object.__setattr__(CFG.risk_limits, "max_position_pct",
+                       max(CFG.risk_limits.max_position_pct, float(_risk_override) * 5))
+
+# DAILY SESSION GUARD (anti-overtrading): once the day's P&L crosses either
+# mark, NO NEW entries for the rest of the session — open positions keep
+# their stops/trails. DAY_PROFIT_BANK banks a good day instead of giving it
+# back; DAY_LOSS_STOP cuts a bad day before the kill-switch has to.
+DAY_PROFIT_BANK = float(os.environ.get("DAY_PROFIT_BANK", "0"))  # e.g. 0.01 = +1%
+DAY_LOSS_STOP = float(os.environ.get("DAY_LOSS_STOP", "0"))      # e.g. 0.01 = -1%
 TICKS_PER_BAR = 24
 SUB_BAR = 6
 STARTING_CASH = float(os.environ.get("STARTING_CASH", "1000000"))
@@ -112,180 +129,9 @@ def sma(bars, i, n=20):
     return sum(b["close"] for b in bars[i - n:i]) / n
 
 
-def mom(bars, i, n=63):
-    if i - 1 - n < 0:
-        return None
-    return bars[i - 1]["close"] / bars[i - 1 - n]["close"] - 1
-
-
-def rsi(bars, i, n=2):
-    if i - 1 - n < 0:
-        return None
-    gains = losses = 0.0
-    for k in range(i - n, i):
-        d = bars[k]["close"] - bars[k - 1]["close"]
-        if d >= 0:
-            gains += d
-        else:
-            losses -= d
-    if gains + losses == 0:
-        return 50.0
-    return 100.0 * gains / (gains + losses)
-
-
-def donchian(bars, i, n=20):
-    if i - 1 - n < 0:
-        return None, None
-    window = bars[i - 1 - n:i - 1]
-    return max(b["high"] for b in window), min(b["low"] for b in window)
-
-
-# ---- entry strategies: return "buy" | "sell" | None ------------------------
-
-def sig_baseline(bars, i, regime):
-    s20 = sma(bars, i, 20)
-    if s20 and bars[i - 1]["close"] > s20:
-        return "buy"
-    return None
-
-
-def sig_tsmom(bars, i, regime):
-    s50 = sma(bars, i, 50)
-    m = mom(bars, i, 63)
-    if s50 is None or m is None:
-        return None
-    c = bars[i - 1]["close"]
-    if c > s50 and m > 0:
-        return "buy"
-    if c < s50 and m < 0:
-        return "sell"
-    return None
-
-
-def sig_donchian(bars, i, regime):
-    if regime["vol_regime"] == "SHOCK":
-        return None
-    hi, lo = donchian(bars, i, 20)
-    if hi is None:
-        return None
-    c = bars[i - 1]["close"]
-    if c > hi:
-        return "buy"
-    if c < lo:
-        return "sell"
-    return None
-
-
-def sig_rsi2(bars, i, regime):
-    s50 = sma(bars, i, 50)
-    r = rsi(bars, i, 2)
-    if s50 is None or r is None:
-        return None
-    if bars[i - 1]["close"] > s50 and r < 10:
-        return "buy"
-    return None
-
-
-def sig_improved(bars, i, regime):
-    if regime["vol_regime"] == "SHOCK":
-        return None                       # never initiate into a shock bar
-    s20, s50 = sma(bars, i, 20), sma(bars, i, 50)
-    m = mom(bars, i, 63)
-    if s20 is None or s50 is None or m is None:
-        return None
-    c = bars[i - 1]["close"]
-    if c > s20 > s50 and m > 0:
-        return "buy"
-    if c < s20 < s50 and m < 0:
-        return "sell"
-    return None
-
-
-def sig_improved2(bars, i, regime):
-    """v2: faster re-entry — SMA20 + 21d momentum, still no entries in SHOCK."""
-    if regime["vol_regime"] == "SHOCK":
-        return None
-    s20 = sma(bars, i, 20)
-    m = mom(bars, i, 21)
-    if s20 is None or m is None:
-        return None
-    c = bars[i - 1]["close"]
-    if c > s20 and m > 0:
-        return "buy"
-    return None
-
-
-def sig_improved3(bars, i, regime):
-    """v3: fast momentum gated by long-trend confirmation — SHOCK filter,
-    close > SMA20 AND SMA50, 21d momentum positive."""
-    if regime["vol_regime"] == "SHOCK":
-        return None
-    s20, s50 = sma(bars, i, 20), sma(bars, i, 50)
-    m = mom(bars, i, 21)
-    if s20 is None or s50 is None or m is None:
-        return None
-    c = bars[i - 1]["close"]
-    if c > s20 and c > s50 and m > 0:
-        return "buy"
-    return None
-
-
-def sig_accurate(bars, i, regime):
-    """Accuracy-focused: trend-aligned PULLBACK entry. Instead of chasing
-    breakouts (low win rate in ranges), buy weakness inside a confirmed
-    uptrend / short strength inside a confirmed downtrend. No SHOCK entries,
-    no RANGE entries — fewer, higher-quality trades."""
-    if regime["vol_regime"] == "SHOCK" or regime["trend_state"] == "RANGE":
-        return None
-    s20, s50 = sma(bars, i, 20), sma(bars, i, 50)
-    m = mom(bars, i, 21)
-    r = rsi(bars, i, 2)
-    if s20 is None or s50 is None or m is None or r is None:
-        return None
-    c = bars[i - 1]["close"]
-    if c > s50 and m > 0 and r < 25:
-        return "buy"                     # dip inside an uptrend
-    return None
-
-
-def sig_accurate_ls(bars, i, regime):
-    """accurate + mirrored short side: short the bounce inside a downtrend."""
-    d = sig_accurate(bars, i, regime)
-    if d:
-        return d
-    if regime["vol_regime"] == "SHOCK":
-        return None
-    s50 = sma(bars, i, 50)
-    m = mom(bars, i, 21)
-    r = rsi(bars, i, 2)
-    if s50 is None or m is None or r is None:
-        return None
-    c = bars[i - 1]["close"]
-    if c < s50 and m < 0 and r > 75:
-        return "sell"                    # bounce inside a downtrend
-    return None
-
-
-def sig_tsmom_f(bars, i, regime):
-    """TSMOM filtered: same long/short momentum, but only when price is
-    meaningfully AWAY from SMA20 in either direction (>1%) — a symmetric
-    not-in-chop filter (the repo regime maps downtrends to RANGE, which
-    would silently kill shorts). No SHOCK entries."""
-    if regime["vol_regime"] == "SHOCK":
-        return None
-    s20 = sma(bars, i, 20)
-    if s20 is None:
-        return None
-    dev = (bars[i - 1]["close"] - s20) / s20
-    if abs(dev) < 0.01:
-        return None                      # chopping around the mean — stand aside
-    return sig_tsmom(bars, i, regime)
-
-
-SIGNALS = {"baseline": sig_baseline, "tsmom": sig_tsmom, "donchian": sig_donchian,
-           "rsi2": sig_rsi2, "improved": sig_improved, "improved2": sig_improved2,
-           "improved3": sig_improved3, "accurate": sig_accurate,
-           "accurate_ls": sig_accurate_ls, "tsmom_f": sig_tsmom_f}
+# Signals + indicator helpers now live in the PRODUCTION strategy engine
+# (src/strategies/signals.py) — promoted from this script in Aug 2026.
+from src.strategies.signals import SIGNALS  # noqa: E402
 
 
 def intrabar_path(bar, rng):
@@ -303,6 +149,9 @@ def intrabar_path(bar, rng):
 
 
 def real_regime(bars, i):
+    """SYMMETRIC regime: trend strength from |deviation| (down-trends are
+    trends too — the old version mapped them to RANGE, the long-bias trap),
+    plus explicit trend_direction like the production RegimeDetector."""
     s = sma(bars, i)
     tr = max(bars[i]["high"] - bars[i]["low"],
              abs(bars[i]["high"] - bars[i - 1]["close"]),
@@ -310,10 +159,13 @@ def real_regime(bars, i):
     a = atr14(bars, i)
     vol = "SHOCK" if (a and tr > 2.5 * a) else "NORMAL"
     if s is None:
-        return {"trend_state": "RANGE", "vol_regime": vol}
-    above = (bars[i - 1]["close"] - s) / s
-    trend = "STRONG_TREND" if above > 0.02 else ("WEAK_TREND" if above > 0 else "RANGE")
-    return {"trend_state": trend, "vol_regime": vol}
+        return {"trend_state": "RANGE", "vol_regime": vol, "trend_direction": "FLAT"}
+    dev = (bars[i - 1]["close"] - s) / s
+    strength = abs(dev)
+    trend = ("STRONG_TREND" if strength > 0.02
+             else ("WEAK_TREND" if strength > 0.005 else "RANGE"))
+    direction = "UP" if dev > 0.002 else ("DOWN" if dev < -0.002 else "FLAT")
+    return {"trend_state": trend, "vol_regime": vol, "trend_direction": direction}
 
 
 class MemRedis:
@@ -389,7 +241,9 @@ async def run():
         config=CFG, kill_switch=ks, anomaly_guard=guard,
         margin_checker=MarginChecker(CFG.risk_limits, india_api=PaperMarginAPI(broker),
                                      mt5_api=PaperMarginAPI(broker)),
-        connections=conns, redis=redis, balance_fn=lambda: STARTING_CASH,
+        # COMPOUNDING: size each trade off LIVE equity, not starting cash —
+        # wins raise future position sizes, losses shrink them (real behavior)
+        connections=conns, redis=redis, balance_fn=lambda: broker.equity(),
         signal_valid_fn=lambda s, d: True, band_check_fn=lambda s, p: True,
         session_open_fn=lambda leg: True,
         audit_fn=lambda row: audit.append({"type": "order", **row}))
@@ -399,7 +253,9 @@ async def run():
     rng = random.Random(11)
     clock = 1_000_000.0
     equity_curve, entries, rejected = [], 0, {}
-    throttled_days = 0
+    throttled_days = heat_rejections = 0
+    session_guard = SessionGuard(profit_bank_pct=DAY_PROFIT_BANK, loss_stop_pct=DAY_LOSS_STOP)
+    heat_mgr = PortfolioHeatManager(max_heat_pct=float(os.environ.get("MAX_HEAT_PCT", "0.06")))
 
     for date in all_dates:
         # giveback throttle: no NEW risk while under water vs the rolling high
@@ -409,6 +265,7 @@ async def run():
             if broker.equity() < max(recent) * (1 - GIVEBACK_PCT):
                 throttle = True
                 throttled_days += 1
+        session_guard.start_session(broker.equity())
         for sym, bars in data.items():
             i = index_of[sym].get(date)
             if i is None or i < 21:
@@ -418,7 +275,18 @@ async def run():
             broker.on_tick(sym, bar["open"])
 
             held = sym in exit_mgr.positions and exit_mgr.positions[sym].state != "EXITED"
-            direction = None if held or not a or throttle else signal_fn(bars, i, regime)
+            day_ok = session_guard.allows_new_entries(broker.equity())
+            direction = (None if held or not a or throttle or not day_ok
+                         else signal_fn(bars, i, regime))
+            # portfolio heat gate (MODULE 46): refuse new risk when the book's
+            # aggregate stop-loss exposure would exceed the cap
+            if direction:
+                hc = heat_mgr.check(
+                    positions=exit_mgr.positions.values(), equity=broker.equity(),
+                    proposed_risk=broker.equity() * CFG.risk_limits.max_risk_per_trade_pct)
+                if not hc.allowed:
+                    heat_rejections += 1
+                    direction = None
             # Shorts are now first-class: direction is threaded through the
             # exit adapters (BUY protective stops / buy-back exits) and the
             # paper server resolves the closing side from the open position.
@@ -496,6 +364,9 @@ async def run():
         "buy_hold_equal_weight_return_pct": round(bh, 2),
         "entries": entries, "fills": len(broker.fills),
         "throttled_days": throttled_days,
+        "days_banked": session_guard.state.days_banked if session_guard.state else 0,
+        "days_loss_stopped": session_guard.state.days_loss_stopped if session_guard.state else 0,
+        "heat_rejections": heat_rejections,
         "closed_trades": len(exits_log),
         "win_rate_pct": round(100 * len(wins) / len(exits_log), 1) if exits_log else None,
         "avg_realized_r": round(sum(e["realized_r"] for e in exits_log) / len(exits_log), 2) if exits_log else None,

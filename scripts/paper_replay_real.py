@@ -186,7 +186,9 @@ async def run():
         config=CFG, kill_switch=ks, anomaly_guard=guard,
         margin_checker=MarginChecker(CFG.risk_limits, india_api=PaperMarginAPI(broker),
                                      mt5_api=PaperMarginAPI(broker)),
-        connections=conns, redis=redis, balance_fn=lambda: STARTING_CASH,
+        connections=conns, redis=redis,
+        # COMPOUNDING (Aug 2026): size off LIVE equity, not starting cash
+        balance_fn=lambda: broker.equity(),
         signal_valid_fn=lambda s, d: True, band_check_fn=lambda s, p: True,
         session_open_fn=lambda leg: True,
         audit_fn=lambda row: audit.append({"type": "order", **row}))

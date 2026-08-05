@@ -46,6 +46,7 @@ export const api = {
     req('/control/resume_entries', token, { method: 'POST',
       body: JSON.stringify({ reason }) }),
   whoami: (token: string): Promise<{ role: string }> => req('/whoami', token),
+  trades: (token: string): Promise<any[]> => req('/trades', token),
   approve: (token: string, id: string) =>
     req(`/control/approve/${id}`, token, { method: 'POST', body: '{}' }),
 };

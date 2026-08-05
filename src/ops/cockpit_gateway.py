@@ -34,6 +34,7 @@ def create_gateway(
     approvals_fn: Optional[Callable] = None,   # -> list of pending approvals
     approve_fn: Optional[Callable] = None,     # (approval_id, actor) -> None
     resume_entries_fn: Optional[Callable] = None,  # (actor) -> None — safe-start release
+    trades_fn: Optional[Callable] = None,      # -> recent closed trades (blotter)
     ui_dir: Optional[str] = "cockpit/web",     # M45 SPA (zero-build, static)
 ) -> FastAPI:
     app = FastAPI(title="Trading OS Cockpit Gateway", docs_url=None, redoc_url=None)
@@ -89,6 +90,12 @@ def create_gateway(
     @app.get("/approvals")
     async def approvals(actor: dict = Depends(authed)):
         return await approvals_fn() if approvals_fn else []
+
+    @app.get("/trades")
+    async def trades(actor: dict = Depends(authed)):
+        """Trade blotter (viewer+): recent closed trades with R, exit reason,
+        MFE captured — the operator's ground-truth view of exit quality."""
+        return await trades_fn() if trades_fn else []
 
     # ---------- control side (operator only, audited) ----------
 

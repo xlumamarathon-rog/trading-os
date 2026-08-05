@@ -135,6 +135,8 @@ class RegimeState:
     atr_value: float
     gex_regime: str = "unknown"
     session: str = "unknown"
+    trend_direction: str = "FLAT"  # UP / DOWN / FLAT — ADX is direction-blind;
+                                   # short strategies need the sign (Aug 2026)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -162,6 +164,22 @@ def classify_trend(adx_value: float, closes: Sequence[float],
     return "RANGE"
 
 
+def classify_direction(closes: Sequence[float], fast: int = 20, slow: int = 50,
+                       flat_band: float = 0.002) -> str:
+    """Sign of the trend, symmetric by construction: EMA-fast vs EMA-slow
+    with a small dead band. ADX (strength) says HOW MUCH; this says WHICH WAY
+    — downtrends are DOWN, not 'RANGE' (the long-bias trap)."""
+    f, s = ema(list(closes), fast), ema(list(closes), slow)
+    if s == 0:
+        return "FLAT"
+    dev = (f - s) / abs(s)
+    if dev > flat_band:
+        return "UP"
+    if dev < -flat_band:
+        return "DOWN"
+    return "FLAT"
+
+
 class RegimeDetector:
     def __init__(self, redis, vol_window: int, hurst_window: int, adx_period: int) -> None:
         self.redis = redis
@@ -181,6 +199,7 @@ class RegimeDetector:
             vol_regime=vol_regime,
             vol_percentile=pctl,
             trend_state=classify_trend(adx_val, closes),
+            trend_direction=classify_direction(closes),
             adx_value=adx_val,
             hurst=hurst_exponent(list(closes[-self.hurst_window:])),
             atr_value=atr(highs, lows, closes),

@@ -6,8 +6,10 @@ export default function KillSwitch({ token, halted, role, onDone }:
     { token: string; halted: boolean; role: string; onDone: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const [pausing, setPausing] = useState(false);
   const [phrase, setPhrase] = useState('');
   const [reason, setReason] = useState('');
+  const [pauseReason, setPauseReason] = useState('');
   const [unlockPhrase, setUnlockPhrase] = useState('');
   const [err, setErr] = useState('');
   const op = role === 'operator';
@@ -24,6 +26,12 @@ export default function KillSwitch({ token, halted, role, onDone }:
   // SAFE-START release (OPERATOR.md step 7): deliberate two-click resume.
   async function doResume() {
     try { await api.resume(token, 'cockpit resume'); setResuming(false); setErr(''); onDone(); }
+    catch (e: any) { setErr(e.message === 'forbidden' ? 'operator role required' : e.message); }
+  }
+  // PAUSE ENTRIES: the deliberate button the old role-probe never was.
+  async function doPause() {
+    try { await api.pause(token, pauseReason || 'cockpit manual pause');
+          setPausing(false); setPauseReason(''); setErr(''); onDone(); }
     catch (e: any) { setErr(e.message === 'forbidden' ? 'operator role required' : e.message); }
   }
 
@@ -48,6 +56,16 @@ export default function KillSwitch({ token, halted, role, onDone }:
           <p className="dim">Safe-start release — the system will begin taking NEW entries:</p>
           <button className="ghost small" onClick={doResume}>CONFIRM RESUME</button>
           <button className="ghost small" onClick={() => setResuming(false)}>cancel</button>
+        </div>)}
+      {!halted && op && !pausing && (
+        <button className="ghost small" onClick={() => setPausing(true)}>PAUSE ENTRIES</button>)}
+      {!halted && op && pausing && (
+        <div>
+          <p className="dim">Stop taking NEW entries (open positions keep their stops):</p>
+          <input value={pauseReason} onChange={(e) => setPauseReason(e.target.value)}
+            placeholder="reason (logged)" />
+          <button className="ghost small" onClick={doPause}>CONFIRM PAUSE</button>
+          <button className="ghost small" onClick={() => setPausing(false)}>cancel</button>
         </div>)}
       {halted && (
         <div>

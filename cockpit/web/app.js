@@ -56,6 +56,11 @@ const demo = {
     { id: "rule-7", label: "Rule: skip entries when GEX regime = amplify + severity ≥ 7 (holdout p=0.04)" },
     { id: "model-v3", label: "Model promotion v3: Brier 0.184→0.171, after-cost +6.2% on holdout" },
   ],
+  trades: [
+    { symbol: "RELIANCE", direction: "buy", realized_r: 1.8, reason: "trail_stop", mfe_captured_pct: 78.3 },
+    { symbol: "BTCUSD", direction: "sell", realized_r: -0.9, reason: "stop_hit", mfe_captured_pct: 0.0 },
+    { symbol: "EURUSD", direction: "buy", realized_r: 0.4, reason: "time_stop_no_progress", mfe_captured_pct: 31.0 },
+  ],
   events: [
     { t: "10:42:11", m: "anomaly_guard: velocity_5s trigger NIFTY — entries paused 15m" },
     { t: "10:41:58", m: "regime NIFTY → SHOCK (vol pctl 0.97)" },
@@ -71,6 +76,7 @@ function demoApi(path, opts) {
     return Promise.resolve(JSON.parse(JSON.stringify(demo)));
   }
   if (path === "/approvals") return Promise.resolve(demo.approvals);
+  if (path === "/trades") return Promise.resolve(demo.trades);
   if (path === "/control/kill") { demo.halted = true; return Promise.resolve({ ok: true }); }
   if (path === "/control/unlock") { demo.halted = false; return Promise.resolve({ halted: false }); }
   if (path.startsWith("/control/approve/")) {
@@ -131,6 +137,8 @@ function render(s) {
   const canResume = state.role === "operator" && !s.halted;
   $("resume-btn").classList.toggle("hidden", !canResume);
   if (!canResume) $("resume-confirm").classList.add("hidden");
+  $("pause-btn").classList.toggle("hidden", !canResume);
+  if (!canResume) $("pause-confirm").classList.add("hidden");
 
   state.equityHistory.push(s.equity ?? 0);
   if (state.equityHistory.length > 80) state.equityHistory.shift();
@@ -152,6 +160,16 @@ function drawSpark() {
   ctx.strokeStyle = xs[xs.length - 1] >= xs[0] ? "#2ecc71" : "#e74c3c";
   ctx.lineWidth = 1.6;
   ctx.stroke();
+}
+
+async function renderBlotter() {
+  const trades = await api("/trades").catch(() => []);
+  const tbody = $("blotter").querySelector("tbody");
+  tbody.innerHTML = (trades || []).slice(-25).reverse().map(t => `
+    <tr><td>${esc(t.symbol)}</td><td>${esc(t.direction || "")}</td>
+    <td class="${(t.realized_r ?? 0) >= 0 ? "pos" : "neg"}">${(t.realized_r ?? 0).toFixed(2)}R</td>
+    <td>${esc(t.reason)}</td><td>${esc(t.mfe_captured_pct ?? "")}</td></tr>`).join("")
+    || `<tr><td colspan="5" class="sub">no closed trades yet</td></tr>`;
 }
 
 async function renderApprovals() {
@@ -226,6 +244,17 @@ function wire() {
     $("resume-confirm").classList.add("hidden");
     tick();
   });
+
+  // PAUSE ENTRIES: the deliberate button the old role-probe never was.
+  $("pause-btn").addEventListener("click", () => $("pause-confirm").classList.remove("hidden"));
+  $("pause-cancel").addEventListener("click", () => $("pause-confirm").classList.add("hidden"));
+  $("pause-go").addEventListener("click", async () => {
+    await api("/control/pause_entries", { method: "POST",
+      body: JSON.stringify({ reason: $("pause-reason").value || "cockpit manual pause" }) }).catch(() => {});
+    $("pause-reason").value = "";
+    $("pause-confirm").classList.add("hidden");
+    tick();
+  });
 }
 
 async function boot() {
@@ -233,7 +262,9 @@ async function boot() {
   await probeRole();       // role known BEFORE first render (stored token case)
   tick();
   renderApprovals();
+  renderBlotter();
   setInterval(tick, POLL_MS);
+  setInterval(renderBlotter, POLL_MS * 4);
 }
 
 boot();
