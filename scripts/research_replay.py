@@ -72,6 +72,11 @@ if _symbols_file.exists():
     REPORT_FROM = REPORT_FROM or _spec.get("report_from", "")
 
 DEFAULT_SIGMA = {"india": 0.016, "mt5_forex": 0.005, "mt5_crypto": 0.035}
+
+# Portfolio giveback throttle: pause NEW entries while equity sits more than
+# GIVEBACK_PCT below its rolling 20-session high (open positions keep their
+# stops/trails — this only stops adding risk during a losing cluster).
+GIVEBACK_PCT = float(os.environ.get("GIVEBACK_PCT", "0"))   # e.g. 0.02 = 2%
 TICKS_PER_BAR = 24
 SUB_BAR = 6
 STARTING_CASH = 1_000_000.0
@@ -225,9 +230,62 @@ def sig_improved3(bars, i, regime):
     return None
 
 
+def sig_accurate(bars, i, regime):
+    """Accuracy-focused: trend-aligned PULLBACK entry. Instead of chasing
+    breakouts (low win rate in ranges), buy weakness inside a confirmed
+    uptrend / short strength inside a confirmed downtrend. No SHOCK entries,
+    no RANGE entries — fewer, higher-quality trades."""
+    if regime["vol_regime"] == "SHOCK" or regime["trend_state"] == "RANGE":
+        return None
+    s20, s50 = sma(bars, i, 20), sma(bars, i, 50)
+    m = mom(bars, i, 21)
+    r = rsi(bars, i, 2)
+    if s20 is None or s50 is None or m is None or r is None:
+        return None
+    c = bars[i - 1]["close"]
+    if c > s50 and m > 0 and r < 25:
+        return "buy"                     # dip inside an uptrend
+    return None
+
+
+def sig_accurate_ls(bars, i, regime):
+    """accurate + mirrored short side: short the bounce inside a downtrend."""
+    d = sig_accurate(bars, i, regime)
+    if d:
+        return d
+    if regime["vol_regime"] == "SHOCK":
+        return None
+    s50 = sma(bars, i, 50)
+    m = mom(bars, i, 21)
+    r = rsi(bars, i, 2)
+    if s50 is None or m is None or r is None:
+        return None
+    c = bars[i - 1]["close"]
+    if c < s50 and m < 0 and r > 75:
+        return "sell"                    # bounce inside a downtrend
+    return None
+
+
+def sig_tsmom_f(bars, i, regime):
+    """TSMOM filtered: same long/short momentum, but only when price is
+    meaningfully AWAY from SMA20 in either direction (>1%) — a symmetric
+    not-in-chop filter (the repo regime maps downtrends to RANGE, which
+    would silently kill shorts). No SHOCK entries."""
+    if regime["vol_regime"] == "SHOCK":
+        return None
+    s20 = sma(bars, i, 20)
+    if s20 is None:
+        return None
+    dev = (bars[i - 1]["close"] - s20) / s20
+    if abs(dev) < 0.01:
+        return None                      # chopping around the mean — stand aside
+    return sig_tsmom(bars, i, regime)
+
+
 SIGNALS = {"baseline": sig_baseline, "tsmom": sig_tsmom, "donchian": sig_donchian,
            "rsi2": sig_rsi2, "improved": sig_improved, "improved2": sig_improved2,
-           "improved3": sig_improved3}
+           "improved3": sig_improved3, "accurate": sig_accurate,
+           "accurate_ls": sig_accurate_ls, "tsmom_f": sig_tsmom_f}
 
 
 def intrabar_path(bar, rng):
@@ -341,8 +399,16 @@ async def run():
     rng = random.Random(11)
     clock = 1_000_000.0
     equity_curve, entries, rejected = [], 0, {}
+    throttled_days = 0
 
     for date in all_dates:
+        # giveback throttle: no NEW risk while under water vs the rolling high
+        throttle = False
+        if GIVEBACK_PCT > 0 and equity_curve:
+            recent = [p["equity"] for p in equity_curve[-20:]]
+            if broker.equity() < max(recent) * (1 - GIVEBACK_PCT):
+                throttle = True
+                throttled_days += 1
         for sym, bars in data.items():
             i = index_of[sym].get(date)
             if i is None or i < 21:
@@ -352,7 +418,7 @@ async def run():
             broker.on_tick(sym, bar["open"])
 
             held = sym in exit_mgr.positions and exit_mgr.positions[sym].state != "EXITED"
-            direction = None if held or not a else signal_fn(bars, i, regime)
+            direction = None if held or not a or throttle else signal_fn(bars, i, regime)
             # Shorts are now first-class: direction is threaded through the
             # exit adapters (BUY protective stops / buy-back exits) and the
             # paper server resolves the closing side from the open position.
@@ -429,6 +495,7 @@ async def run():
         "sharpe_annualized": round(sharpe, 2),
         "buy_hold_equal_weight_return_pct": round(bh, 2),
         "entries": entries, "fills": len(broker.fills),
+        "throttled_days": throttled_days,
         "closed_trades": len(exits_log),
         "win_rate_pct": round(100 * len(wins) / len(exits_log), 1) if exits_log else None,
         "avg_realized_r": round(sum(e["realized_r"] for e in exits_log) / len(exits_log), 2) if exits_log else None,
