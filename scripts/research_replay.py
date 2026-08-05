@@ -85,6 +85,13 @@ if _risk_override:
     object.__setattr__(CFG.risk_limits, "max_risk_per_trade_pct", float(_risk_override))
     object.__setattr__(CFG.risk_limits, "max_position_pct",
                        max(CFG.risk_limits.max_position_pct, float(_risk_override) * 5))
+
+# DAILY SESSION GUARD (anti-overtrading): once the day's P&L crosses either
+# mark, NO NEW entries for the rest of the session — open positions keep
+# their stops/trails. DAY_PROFIT_BANK banks a good day instead of giving it
+# back; DAY_LOSS_STOP cuts a bad day before the kill-switch has to.
+DAY_PROFIT_BANK = float(os.environ.get("DAY_PROFIT_BANK", "0"))  # e.g. 0.01 = +1%
+DAY_LOSS_STOP = float(os.environ.get("DAY_LOSS_STOP", "0"))      # e.g. 0.01 = -1%
 TICKS_PER_BAR = 24
 SUB_BAR = 6
 STARTING_CASH = float(os.environ.get("STARTING_CASH", "1000000"))
@@ -409,7 +416,7 @@ async def run():
     rng = random.Random(11)
     clock = 1_000_000.0
     equity_curve, entries, rejected = [], 0, {}
-    throttled_days = 0
+    throttled_days = days_banked = days_loss_stopped = 0
 
     for date in all_dates:
         # giveback throttle: no NEW risk while under water vs the rolling high
@@ -419,6 +426,8 @@ async def run():
             if broker.equity() < max(recent) * (1 - GIVEBACK_PCT):
                 throttle = True
                 throttled_days += 1
+        day_start_equity = broker.equity()
+        day_guard_hit = False
         for sym, bars in data.items():
             i = index_of[sym].get(date)
             if i is None or i < 21:
@@ -427,8 +436,20 @@ async def run():
             regime = real_regime(bars, i)
             broker.on_tick(sym, bar["open"])
 
+            # daily session guard: bank a good day / cut a bad one — no new
+            # entries after either mark (exits still manage open positions)
+            if not day_guard_hit and (DAY_PROFIT_BANK > 0 or DAY_LOSS_STOP > 0):
+                day_pnl = broker.equity() / day_start_equity - 1
+                if DAY_PROFIT_BANK > 0 and day_pnl >= DAY_PROFIT_BANK:
+                    day_guard_hit = True
+                    days_banked += 1
+                elif DAY_LOSS_STOP > 0 and day_pnl <= -DAY_LOSS_STOP:
+                    day_guard_hit = True
+                    days_loss_stopped += 1
+
             held = sym in exit_mgr.positions and exit_mgr.positions[sym].state != "EXITED"
-            direction = None if held or not a or throttle else signal_fn(bars, i, regime)
+            direction = (None if held or not a or throttle or day_guard_hit
+                         else signal_fn(bars, i, regime))
             # Shorts are now first-class: direction is threaded through the
             # exit adapters (BUY protective stops / buy-back exits) and the
             # paper server resolves the closing side from the open position.
@@ -506,6 +527,7 @@ async def run():
         "buy_hold_equal_weight_return_pct": round(bh, 2),
         "entries": entries, "fills": len(broker.fills),
         "throttled_days": throttled_days,
+        "days_banked": days_banked, "days_loss_stopped": days_loss_stopped,
         "closed_trades": len(exits_log),
         "win_rate_pct": round(100 * len(wins) / len(exits_log), 1) if exits_log else None,
         "avg_realized_r": round(sum(e["realized_r"] for e in exits_log) / len(exits_log), 2) if exits_log else None,
