@@ -82,6 +82,9 @@ class OrderRouter:
         audit_fn: Optional[Callable] = None,
         on_filled: Optional[Callable] = None,
         cost_fn_factory: Optional[Callable] = None,
+        portfolio_guard_fn: Optional[Callable] = None,  # (req) -> (ok, reason):
+        # portfolio-LEVEL gate (heat cap / session guard) — runs after the
+        # per-order pre-checks, before sizing (MODULE 46/48, Aug 2026)
     ) -> None:
         self.cfg = config
         self.kill_switch = kill_switch
@@ -97,6 +100,7 @@ class OrderRouter:
         self.audit_fn = audit_fn
         self.on_filled = on_filled
         self.cost_fn_factory = cost_fn_factory
+        self.portfolio_guard_fn = portfolio_guard_fn
         mt5_classes = self.cfg.model_extra["broker"]["mt5"]["symbol_classes"]
         self._forex = set(mt5_classes.get("forex", []))
         self._crypto = set(mt5_classes.get("crypto_cfd", []))
@@ -177,6 +181,14 @@ class OrderRouter:
                       [(var_ok, var_reason), (sig_ok, sig_reason), (band_ok, band_reason), (sess_ok, sess_reason)]
                       if not ok]
             return await self._reject(req, f"precheck_failed:{failed[0]}", checks)
+
+        # 3b. portfolio-level guard (MODULE 46 heat cap / MODULE 48 session
+        #     guard) — a NEW position must clear the book-level gates too
+        if self.portfolio_guard_fn is not None:
+            g_ok, g_reason = await _maybe_await(self.portfolio_guard_fn(req))
+            checks["portfolio_guard"] = g_reason
+            if not g_ok:
+                return await self._reject(req, f"portfolio_guard:{g_reason}", checks)
 
         # 4-5. size (stop-distance based, VaR headroom, gap, costs)
         balance = float(await _maybe_await(self.balance_fn()))
