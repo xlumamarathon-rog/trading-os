@@ -20,12 +20,21 @@ INVARIANTS (code-enforced, property-tested):
 """
 from __future__ import annotations
 
+import inspect
 import logging
 import time
 from dataclasses import dataclass, field
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+async def _maybe_await(result):
+    """on_partial/on_exit may be sync or async — same tolerance the router
+    gives its on_filled callback (Aug 6 seam hunt)."""
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 
 class StopWidenAttempt(RuntimeError):
@@ -59,6 +68,7 @@ class ManagedPosition:
     remaining_qty: float = 0.0
     lot_size: float = 1.0
     opened_at: float = field(default_factory=time.time)
+    profit_locked: bool = False    # runner banked its profit floor -> tight trail only
     telemetry: Optional[ExitTelemetry] = None
 
     @property
@@ -157,7 +167,7 @@ class ExitManager:
                 pos.stop_order_id, pos.symbol, pos.remaining_qty, pos.stop, pos.leg,
                 direction=pos.direction)
         if self.on_partial:
-            await self.on_partial(pos.symbol, qty, price, at_r)
+            await _maybe_await(self.on_partial(pos.symbol, qty, price, at_r))
 
     async def _exit(self, pos: ManagedPosition, price: float, reason: str) -> None:
         mfe_r = self._r_multiple(pos, pos.extreme)
@@ -185,7 +195,7 @@ class ExitManager:
                 await self.adapter.exit_market(pos.symbol, qty, pos.leg,
                                                direction=pos.direction)
         if self.on_exit:
-            await self.on_exit(pos.symbol, pos.telemetry)
+            await _maybe_await(self.on_exit(pos.symbol, pos.telemetry))
 
     # ---------- per-bar lifecycle ----------
 
@@ -251,9 +261,22 @@ class ExitManager:
                 actions.append("partial_2")
             pos.state = "TRAILING"
 
+        # 5.5 profit lock (runner banks a floor once at_r is reached; from then on
+        #     the trail is TIGHT — trail_k — regardless of regime; flag must
+        #     survive snapshot/restore or a restart would silently widen the trail)
+        pl = self.cfg.get("profit_lock")
+        if pl and not pos.profit_locked and r_now >= float(pl["at_r"]):
+            lock_level = (pos.entry + float(pl["lock_r"]) * pos.r_value) if pos.is_long \
+                else (pos.entry - float(pl["lock_r"]) * pos.r_value)
+            if await self._ratchet_stop(pos, lock_level):
+                actions.append(f"profit_lock:{float(pl['lock_r']):g}R")
+            pos.profit_locked = True
+
         # 6. chandelier trail (runner)
-        if pos.state in ("BREAKEVEN", "TRAILING"):
+        if pos.state in ("BREAKEVEN", "TRAILING") or pos.profit_locked:
             k = self._k_trail(regime, event_minutes, pos.leg, crypto_weekend)
+            if pos.profit_locked and pl:
+                k = min(k, float(pl["trail_k"]))   # tight trail wins after lock
             chandelier = (pos.extreme - k * pos.atr) if pos.is_long else (pos.extreme + k * pos.atr)
             if await self._ratchet_stop(pos, chandelier):
                 actions.append(f"trail:{k:g}xATR")

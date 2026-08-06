@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.app import GATE_FILE, WorkerSupervisor, assert_live_allowed
+from src.core.guard_stack import make_portfolio_guard
 from src.core.kill_switch import KillSwitch
 from src.core.margin_checker import MarginChecker
 from src.core.order_router import OrderRouter
@@ -70,6 +71,9 @@ class Runtime:
     risk: object
     safe_started: bool = False
     boot_log: list = field(default_factory=list)
+    budget: object = None            # MODULE 55 ring-fenced budget (None = not configured)
+    session_guard: object = None     # MODULE 48 day-P&L guard
+    heat_mgr: object = None          # MODULE 46 portfolio heat cap
 
 
 async def build_runtime(cfg, *, mode: str, redis, connections, kill_brokers: dict,
@@ -78,6 +82,8 @@ async def build_runtime(cfg, *, mode: str, redis, connections, kill_brokers: dic
                         gate_path: str | Path = GATE_FILE,
                         signal_valid_fn=None, band_check_fn=None,
                         session_open_fn=None, alert_fn=None,
+                        budget=None, session_guard=None, heat_mgr=None,
+                        positions_fn=None, equity_fn=None,
                         india_apikey: str = "", algo_id: str = "") -> Runtime:
     if mode not in ("paper", "live"):
         raise ValueError("mode must be paper|live")
@@ -112,6 +118,19 @@ async def build_runtime(cfg, *, mode: str, redis, connections, kill_brokers: dic
 
     risk = RampedRisk(cfg.risk_limits, ramp_cap_for(cfg, gate_path, mode))
 
+    # Portfolio-level guard stack (MODULES 46/48/55) — the ONE gate every NEW
+    # entry must clear before sizing. Aug 6 seam hunt: the modules, the router
+    # hook and the composition all existed, but the production assembly never
+    # wired them together (only research scripts and tests did). None of the
+    # three configured -> no guard, exact legacy behavior.
+    portfolio_guard_fn = None
+    if budget is not None or session_guard is not None or heat_mgr is not None:
+        portfolio_guard_fn = make_portfolio_guard(
+            equity_fn=equity_fn or balance_fn,       # async ok — guard tolerates both
+            risk_limits=risk,                        # ramped view, same as sizing
+            budget=budget, session_guard=session_guard, heat_mgr=heat_mgr,
+            positions_fn=positions_fn or (lambda: exit_mgr.positions.values()))
+
     router = OrderRouter(
         config=cfg, kill_switch=ks, anomaly_guard=guard,
         margin_checker=MarginChecker(cfg.risk_limits, india_api=india_margin_api,
@@ -120,11 +139,13 @@ async def build_runtime(cfg, *, mode: str, redis, connections, kill_brokers: dic
         signal_valid_fn=signal_valid_fn, band_check_fn=band_check_fn,
         session_open_fn=session_open_fn,
         audit_fn=lambda row: audit.append({"type": "order", **row}),
+        portfolio_guard_fn=portfolio_guard_fn,
         on_filled=None)
     router.cfg = _with_risk(cfg, risk)               # ramped cap flows into sizing
 
     runtime = Runtime(mode=mode, router=router, exit_mgr=exit_mgr, guard=guard,
                       kill_switch=ks, audit=audit, redis=redis, risk=risk,
+                      budget=budget, session_guard=session_guard, heat_mgr=heat_mgr,
                       supervisor=WorkerSupervisor(redis=redis, alert_fn=alert_fn))
 
     if mode == "live":

@@ -16,7 +16,16 @@ from src.intel.trading_agents_adapter import TradingAgentsAdapter, rating_to_sig
 from src.ml.edt_loader import load_evaluate_news
 
 VENDOR = Path("vendor")
-needs_vendor = pytest.mark.skipif(not VENDOR.exists(), reason="vendor/ not cloned")
+EXPECTED_VENDORS = {"openalgo", "TradingAgents", "aiomql", "MiroFish",
+                    "ai-berkshire", "TradeTheEvent", "machine-learning-for-trading"}
+# vendor/ itself is ALWAYS present in git (it carries MANIFEST.md), so checking
+# VENDOR.exists() could never skip — every fresh clone ran the canaries red
+# (Aug 6 seam hunt). Skip only when NO vendor checkout exists; a partial clone
+# still runs the canaries and fails loudly, which is the intent.
+_vendors_cloned = any((VENDOR / name).is_dir() for name in EXPECTED_VENDORS)
+needs_vendor = pytest.mark.skipif(
+    not _vendors_cloned,
+    reason="vendor checkouts not present — run scripts/clone_vendors.sh")
 
 
 # ---------------- adapter tests (always run) ----------------
@@ -140,8 +149,6 @@ def test_canary_tradetheevent_dataset_contract():
 
 @needs_vendor
 def test_canary_all_seven_vendors_present():
-    expected = {"openalgo", "TradingAgents", "aiomql", "MiroFish",
-                "ai-berkshire", "TradeTheEvent", "machine-learning-for-trading"}
     present = {p.name for p in VENDOR.iterdir() if p.is_dir()}
-    missing = expected - present
+    missing = EXPECTED_VENDORS - present
     assert not missing, f"vendors not cloned: {missing} (run scripts/clone_vendors.sh)"

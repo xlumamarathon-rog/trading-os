@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import json
 import logging
 import time
@@ -23,6 +24,15 @@ from pathlib import Path
 from typing import Callable
 
 logger = logging.getLogger("trading_os.app")
+
+
+async def _maybe_await(result):
+    """Injected callbacks may be sync or async — same tolerance as KillSwitch
+    and AnomalyGuard give the SAME alert_fn (Aug 6 seam hunt: the supervisor
+    await-ed unconditionally, so a sync alert_fn silently lost WORKER DOWN)."""
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 GATE_FILE = "gate_state.json"
 LIVE_ACK_PHRASE = "I ACCEPT LIVE TRADING RISK"
@@ -112,8 +122,8 @@ class WorkerSupervisor:
                     self.events.append({"worker": spec.name, "event": "gave_up"})
                     if self.alert_fn:
                         try:
-                            await self.alert_fn(
-                                f"WORKER DOWN (max restarts): {spec.name}: {exc}")
+                            await _maybe_await(self.alert_fn(
+                                f"WORKER DOWN (max restarts): {spec.name}: {exc}"))
                         except Exception as alert_exc:  # noqa: BLE001
                             logger.error("alert failed: %s", alert_exc)
                     self._tasks.pop(spec.name, None)

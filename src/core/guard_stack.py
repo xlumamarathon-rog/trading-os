@@ -16,7 +16,14 @@ All layers are optional (None = skip): the stack degrades gracefully to
 exact behavior."""
 from __future__ import annotations
 
+import inspect
 from typing import Callable, Optional
+
+
+async def _maybe_await(result):
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 
 def make_portfolio_guard(*, equity_fn: Callable,
@@ -25,10 +32,15 @@ def make_portfolio_guard(*, equity_fn: Callable,
                          session_guard=None,
                          heat_mgr=None,
                          positions_fn: Optional[Callable] = None) -> Callable:
-    """Returns async guard(req) -> (ok, reason) for OrderRouter."""
+    """Returns async guard(req) -> (ok, reason) for OrderRouter.
+
+    equity_fn / positions_fn may be sync OR async: the router's balance_fn
+    contract is async, and the natural production wiring reuses that same
+    source here — calling it synchronously would hand float() a coroutine
+    (Aug 6 seam hunt — same class as the ShadowRunner guard bug)."""
 
     async def guard(req) -> tuple[bool, str]:
-        equity = float(equity_fn())
+        equity = float(await _maybe_await(equity_fn()))
 
         if budget is not None:
             ok, why = budget.entries_allowed(equity)
@@ -41,7 +53,7 @@ def make_portfolio_guard(*, equity_fn: Callable,
 
         if heat_mgr is not None:
             tradable = budget.effective(equity) if budget is not None else equity
-            positions = list(positions_fn()) if positions_fn else []
+            positions = list(await _maybe_await(positions_fn())) if positions_fn else []
             hc = heat_mgr.check(
                 positions=positions, equity=tradable,
                 proposed_risk=tradable * risk_limits.max_risk_per_trade_pct)
