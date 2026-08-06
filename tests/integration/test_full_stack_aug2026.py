@@ -262,14 +262,14 @@ async def test_shadow_runner_parity_with_live_intents(tmp_path):
 
     shadow = ShadowRunner(signal_fn=get_signal("tsmom_f"),
                           regime_fn=lambda b, i: TREND)
-    shadow.on_bar("RELIANCE", bars, 79)
+    await shadow.on_bar("RELIANCE", bars, 79)
     rep = diff_decisions(shadow.intents(), live_intents)
     assert rep.clean and rep.matched == 1            # same logic → same intents
 
     # divergence detection: a guard blocks live but not shadow
     blocked = ShadowRunner(signal_fn=get_signal("tsmom_f"),
                            regime_fn=lambda b, i: TREND)
-    blocked.on_bar("RELIANCE", bars, 79)
+    await blocked.on_bar("RELIANCE", bars, 79)
     rep2 = diff_decisions(blocked.intents(), [])     # live traded nothing
     assert not rep2.clean and rep2.missing_live
 
@@ -403,3 +403,44 @@ async def test_short_chain_buy_stop_and_partial_sync(tmp_path):
     assert live and live[0]["quantity"] <= pos.remaining_qty + 1e-9
     # net position is still SHORT the remaining qty (no phantom flip)
     assert fs.broker.positions["RELIANCE"]["qty"] == pytest.approx(-pos.remaining_qty)
+
+
+# ---------- 10. restart recovery preserves the NEW position fields ----------
+
+async def test_snapshot_restore_preserves_profit_lock_state(tmp_path):
+    """Restart mid-trade: profit_locked and partials must survive the
+    snapshot round-trip, and the restored manager must keep TIGHT-trailing
+    (a lost profit_locked flag would silently widen the trail after a crash
+    recovery). Old snapshots without the field must still load."""
+    from src.exits.exit_manager import ExitManager as EM
+
+    cfg = {k: v for k, v in FLAT_EXITS.items()}
+    cfg["partials"] = []
+    cfg["profit_lock"] = {"at_r": 1.0, "lock_r": 0.5, "trail_k": 0.3}
+
+    class Spy:
+        async def place_stop(self, *a, **kw): return "S1"
+        async def modify_stop(self, *a, **kw): pass
+        async def cancel_stop(self, *a, **kw): pass
+        async def replace_stop(self, *a, **kw): return "S1"
+        async def exit_market(self, *a, **kw): pass
+
+    mgr = EM(cfg, Spy())
+    pos = await mgr.attach(symbol="X", direction="buy", entry=100.0, qty=100,
+                           atr=1.5, leg="india")                  # R = 3
+    await mgr.on_bar("X", 104.0, 103.0, 103.5, TREND)             # +1R -> lock
+    assert pos.profit_locked
+
+    snap = mgr.to_snapshot()
+    restored = EM.from_snapshot(snap, cfg, Spy())
+    rpos = restored.positions["X"]
+    assert rpos.profit_locked is True                 # survived the restart
+    assert rpos.stop == pytest.approx(pos.stop)
+    actions = await restored.on_bar("X", 110.0, 109.0, 109.5, TREND)
+    assert any(a == "trail:0.3xATR" for a in actions) # STILL tight-trailing
+
+    # legacy snapshot (pre-profit_lock field) loads with safe default
+    legacy = {sym: {k: v for k, v in f.items() if k != "profit_locked"}
+              for sym, f in snap.items()}
+    old = EM.from_snapshot(legacy, cfg, Spy())
+    assert old.positions["X"].profit_locked is False

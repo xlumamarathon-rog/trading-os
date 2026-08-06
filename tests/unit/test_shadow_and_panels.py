@@ -18,18 +18,18 @@ def regime_fn(bars, i):
 
 # ---------- MODULE 54: shadow runner ----------
 
-def test_shadow_records_signals_and_intents():
+async def test_shadow_records_signals_and_intents():
     sr = ShadowRunner(signal_fn=get_signal("baseline"), regime_fn=regime_fn)
     bars = rising_bars()
-    d = sr.on_bar("X", bars, 79)
+    d = await sr.on_bar("X", bars, 79)
     assert d.signal == "buy" and d.admitted
     assert sr.intents() == [{"date": bars[79]["date"], "symbol": "X", "direction": "buy"}]
 
 
-def test_shadow_guard_rejections_are_logged_not_hidden():
+async def test_shadow_guard_rejections_are_logged_not_hidden():
     sr = ShadowRunner(signal_fn=get_signal("baseline"), regime_fn=regime_fn,
                       entry_allowed_fn=lambda: (False, "portfolio_heat"))
-    d = sr.on_bar("X", rising_bars(), 79)
+    d = await sr.on_bar("X", rising_bars(), 79)
     assert d.signal == "buy" and not d.admitted and d.reject_reason == "portfolio_heat"
     assert sr.intents() == []                       # rejected intent never routed
 
@@ -105,3 +105,27 @@ async def test_config_view_sanitized_and_authed(gw):
     assert body["risk_limits"]["max_risk_per_trade_pct"] == 0.01
     assert "apikey" not in str(body).lower()        # provider owns redaction
     assert (await gw.get("/config")).status_code == 401
+
+
+async def test_shadow_consumes_the_real_guard_stack():
+    """Regression (Aug 6 find): make_portfolio_guard returns an ASYNC
+    guard(req); ShadowRunner previously called entry_allowed_fn() sync with
+    no args -> TypeError. Shadow must run the IDENTICAL guards as live."""
+    from src.core.budget_manager import BudgetManager
+    from src.core.config_loader import load_config
+    from src.core.guard_stack import make_portfolio_guard
+
+    cfg = load_config("config/master.yaml")
+    budget = BudgetManager(200_000)
+    budget.attach(1_000_000)
+    guard = make_portfolio_guard(equity_fn=lambda: 1_000_000.0,
+                                 risk_limits=cfg.risk_limits, budget=budget)
+    sr = ShadowRunner(signal_fn=get_signal("baseline"), regime_fn=regime_fn,
+                      entry_allowed_fn=guard)
+    d = await sr.on_bar("X", rising_bars(), 79)
+    assert d.signal == "buy" and d.admitted          # guard stack says ok
+
+    # exhaust the budget: the SAME guard now blocks shadow exactly like live
+    budget.baseline_equity += 300_000
+    d2 = await sr.on_bar("X", rising_bars(), 79)
+    assert not d2.admitted and d2.reject_reason.startswith("budget:")
