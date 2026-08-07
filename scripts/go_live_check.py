@@ -65,6 +65,14 @@ def main() -> int:
     lint = subprocess.run([sys.executable, "scripts/lint_rules.py"], capture_output=True)
     check("safety lint (L1/L5) clean", lint.returncode == 0)
 
+    # Soft note only — NEVER a PASS/FAIL row: is the PYSEC-2026-1845 pytest fix
+    # on PyPI yet? Neither a PyPI outage nor an available fix may touch the gate.
+    try:
+        from scripts.check_pytest_fix import pytest_fix_note
+        print(f"NOTE  {pytest_fix_note()}")
+    except Exception as exc:  # noqa: BLE001 — the watch must never block the gate
+        print(f"NOTE  pytest-fix watch unavailable ({type(exc).__name__}) — skipped")
+
     # 3. paper evidence + audit chain
     gate_p = Path(args.gate)
     if gate_p.exists():
