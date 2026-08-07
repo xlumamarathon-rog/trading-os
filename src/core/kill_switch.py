@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import secrets
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -148,7 +149,13 @@ class KillSwitch:
     # ---------- manual unlock ----------
 
     async def unlock(self, phrase: str) -> None:
-        if phrase != self._unlock_phrase or not self._unlock_phrase:
+        # The unlock phrase is a SECOND secret beyond the operator token — it is
+        # the only thing standing between a compromised operator credential and
+        # resuming trading after a safety halt. Compare in constant time so the
+        # comparison itself can't leak the phrase byte-by-byte (compare_digest);
+        # an unset phrase always refuses (fail-closed). Semantics unchanged.
+        if not self._unlock_phrase or not secrets.compare_digest(
+                str(phrase).encode(), str(self._unlock_phrase).encode()):
             raise PermissionError("unlock refused: wrong confirmation phrase")
         # Fail-closed: refuse to unlock while Redis is unreachable — otherwise the
         # Redis flag would spring back the moment Redis returns, in an ambiguous state.

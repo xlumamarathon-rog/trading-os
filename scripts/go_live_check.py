@@ -11,6 +11,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -25,6 +26,16 @@ CHECKS = []
 def check(name, ok, detail=""):
     CHECKS.append((name, ok, detail))
     print(f"{'PASS' if ok else 'FAIL'}  {name}{('  — ' + detail) if detail else ''}")
+
+
+def _private_basetemp() -> str:
+    """A pytest --basetemp inside a mode-0700 dir, so the preflight run never
+    uses the world-predictable /tmp/pytest-of-{user} path (PYSEC-2026-1845: a
+    local co-tenant user can race that shared dir for DoS / priv-esc). The fix
+    version (pytest 9.0.3) is not yet released, so we neutralize the mechanism
+    for our one operational pytest invocation instead. mkdtemp() is 0700."""
+    parent = tempfile.mkdtemp(prefix="golive-pytest-")
+    return str(Path(parent) / "bt")
 
 
 def main() -> int:
@@ -46,7 +57,8 @@ def main() -> int:
         cfg = None
 
     # 2. full test suite + safety lint
-    tests = subprocess.run([sys.executable, "-m", "pytest", "tests/", "-q"],
+    tests = subprocess.run([sys.executable, "-m", "pytest", "tests/", "-q",
+                            "--basetemp", _private_basetemp()],
                            capture_output=True, text=True)
     check("full test suite green", tests.returncode == 0,
           tests.stdout.strip().splitlines()[-1] if tests.stdout else "")

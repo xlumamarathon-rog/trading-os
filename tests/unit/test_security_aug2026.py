@@ -136,6 +136,67 @@ async def test_config_endpoint_redacts_even_a_careless_provider(tmp_path):
         assert r.json()["risk_limits"]["max_risk_per_trade_pct"] == 0.01
 
 
+# ---------- 4. kill-switch unlock: constant-time compare, semantics intact ----
+
+def _kill_switch(unlock_phrase):
+    from src.core.kill_switch import KillSwitch
+
+    class MemRedis:
+        def __init__(self): self.store = {"TRADING_HALTED": "1"}
+        async def get(self, k): return self.store.get(k)
+        async def set(self, k, v): self.store[k] = v
+        async def delete(self, k): self.store.pop(k, None)
+
+    return KillSwitch(redis=MemRedis(), brokers={}, sentinel_path="/tmp/_ks_none.sentinel",
+                      unlock_phrase=unlock_phrase, auto_trigger_daily_loss_pct=0.03,
+                      auto_trigger_var_breach=True, max_var_daily=0.02)
+
+
+async def test_unlock_accepts_exact_phrase_and_clears_halt():
+    ks = _kill_switch("RESUME NOW")
+    assert await ks.is_halted() is True
+    await ks.unlock("RESUME NOW")                     # exact -> succeeds
+    assert await ks.is_halted() is False
+
+
+@pytest.mark.parametrize("wrong", ["RESUME NO", "RESUME NOW ", "resume now", "", "X"])
+async def test_unlock_rejects_wrong_phrase(wrong):
+    ks = _kill_switch("RESUME NOW")
+    with pytest.raises(PermissionError):
+        await ks.unlock(wrong)
+    assert await ks.is_halted() is True               # stays halted (fail-closed)
+
+
+async def test_unlock_refuses_when_phrase_unconfigured():
+    ks = _kill_switch("")                              # empty config
+    with pytest.raises(PermissionError):
+        await ks.unlock("")                            # even empty attempt refused
+    assert await ks.is_halted() is True
+
+
+def test_unlock_uses_constant_time_compare():
+    """Guard the hardening itself: a byte-by-byte != would satisfy the tests
+    above too, so assert the constant-time primitive is actually on the path."""
+    import inspect
+
+    from src.core import kill_switch
+    src = inspect.getsource(kill_switch.KillSwitch.unlock)
+    assert "compare_digest" in src
+
+
+# ---------- 5. go-live preflight: pytest basetemp is private (PYSEC-2026-1845) -
+
+def test_go_live_preflight_uses_private_basetemp():
+    import os
+    import scripts.go_live_check as glc
+
+    bt = glc._private_basetemp()
+    parent = os.path.dirname(bt)
+    mode = os.stat(parent).st_mode & 0o777
+    assert mode == 0o700, f"basetemp parent must be private, got {oct(mode)}"
+    assert "/tmp/pytest-of-" not in bt                # not the world-predictable path
+
+
 # ---------- minimal doubles ----------
 
 class _DummyKS:
