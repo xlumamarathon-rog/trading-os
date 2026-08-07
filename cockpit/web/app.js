@@ -72,6 +72,24 @@ const demo = {
     { t: "10:41:58", m: "regime NIFTY → SHOCK (vol pctl 0.97)" },
     { t: "09:15:02", m: "session open · workers healthy · VaR95 0.8%" },
   ],
+  analysis: {
+    technicals: [
+      { symbol: "RELIANCE", read: "bullish", score: 2,
+        studies: { wilder_rsi: 58.2, macd_hist: 12.3, adx: 31.5, pct_b: 0.72, stoch_k: 68.0 } },
+      { symbol: "BTCUSD", read: "bearish", score: -2,
+        studies: { wilder_rsi: 74.1, macd_hist: -180.4, adx: 27.8, pct_b: 1.04, stoch_k: 82.0 } },
+      { symbol: "EURUSD", read: "neutral", score: 0,
+        studies: { wilder_rsi: 49.5, macd_hist: 0.0002, adx: 14.2, pct_b: 0.51, stoch_k: 50.0 } },
+    ],
+    fundamentals: [
+      { symbol: "RELIANCE", score: 83.3, coverage: 6,
+        ratios: { pe: 22.4, pb: 3.1, roe: 0.18, debt_to_equity: 0.6, net_margin: 0.12, current_ratio: 1.7 },
+        flags: ["strong_roe", "strong_net_margin", "strong_current_ratio"] },
+      { symbol: "TCS", score: 58.3, coverage: 6,
+        ratios: { pe: 28.9, pb: 11.2, roe: 0.42, debt_to_equity: 0.1, net_margin: 0.19, current_ratio: 2.6 },
+        flags: ["strong_roe", "weak_fcf_yield"] },
+    ],
+  },
 };
 
 function demoApi(path, opts) {
@@ -85,6 +103,7 @@ function demoApi(path, opts) {
   if (path === "/trades") return Promise.resolve(demo.trades);
   if (path === "/pnl_history") return Promise.resolve(demo.pnl_history);
   if (path === "/config") return Promise.resolve(demo.config_view);
+  if (path === "/analysis") return Promise.resolve(demo.analysis);
   if (path === "/control/kill") { demo.halted = true; return Promise.resolve({ ok: true }); }
   if (path === "/control/unlock") { demo.halted = false; return Promise.resolve({ halted: false }); }
   if (path.startsWith("/control/approve/")) {
@@ -229,6 +248,55 @@ async function renderConfig() {
   $("config-view").textContent = cfg ? JSON.stringify(cfg, null, 2) : "unavailable";
 }
 
+/* Technical + fundamental analysis (MODULES 56/57). Read-only, like every
+ * other panel — analysis is an aid, never an order path. Degrades to a
+ * placeholder when the gateway doesn't serve /analysis yet. */
+function readBadge(read) {
+  return `<span class="read ${esc(read)}">${esc((read || "n/a").toUpperCase())}</span>`;
+}
+function scoreRing(score) {
+  const v = Math.max(0, Math.min(100, Number(score) || 0));
+  const tone = v >= 70 ? "pos" : v >= 40 ? "warn" : "neg";
+  return `<span class="score ${tone}">${score == null ? "—" : v.toFixed(0)}</span>`;
+}
+async function renderAnalysis() {
+  const a = await api("/analysis").catch(() => null);
+  const tech = a && a.technicals;
+  const fund = a && a.fundamentals;
+
+  $("technicals").innerHTML = (tech && tech.length) ? tech.map(t => {
+    const s = t.studies || {};
+    const chip = (label, val) => `<span class="chip mono">${esc(label)} ${esc(val)}</span>`;
+    return `<div class="analysis-item">
+      <div class="analysis-head"><b>${esc(t.symbol)}</b>${readBadge(t.read)}</div>
+      <div class="chips">
+        ${chip("RSI", (s.wilder_rsi ?? 0).toFixed(1))}
+        ${chip("MACD", (s.macd_hist ?? 0).toFixed(1))}
+        ${chip("ADX", (s.adx ?? 0).toFixed(1))}
+        ${chip("%B", (s.pct_b ?? 0).toFixed(2))}
+        ${chip("%K", (s.stoch_k ?? 0).toFixed(0))}
+      </div></div>`;
+  }).join("") : `<div class="sub">no technicals (gateway /analysis not wired)</div>`;
+
+  $("fundamentals").innerHTML = (fund && fund.length) ? fund.map(f => {
+    const r = f.ratios || {};
+    const chip = (label, val) => `<span class="chip mono">${esc(label)} ${esc(val)}</span>`;
+    const flags = (f.flags || []).map(fl =>
+      `<span class="flag ${fl.startsWith("strong") ? "pos" : "neg"}">${esc(fl.replace(/_/g, " "))}</span>`).join("");
+    return `<div class="analysis-item">
+      <div class="analysis-head"><b>${esc(f.symbol)}</b>${scoreRing(f.score)}
+        <span class="sub">${esc(f.coverage ?? 0)}/6 metrics</span></div>
+      <div class="chips">
+        ${chip("P/E", (r.pe ?? 0).toFixed(1))}
+        ${chip("P/B", (r.pb ?? 0).toFixed(1))}
+        ${chip("ROE", ((r.roe ?? 0) * 100).toFixed(0) + "%")}
+        ${chip("D/E", (r.debt_to_equity ?? 0).toFixed(2))}
+        ${chip("NM", ((r.net_margin ?? 0) * 100).toFixed(0) + "%")}
+      </div>
+      <div class="flags">${flags}</div></div>`;
+  }).join("") : `<div class="sub">no fundamentals (wire a provider — yfinance/FMP/OpenBB-as-service)</div>`;
+}
+
 async function renderApprovals() {
   const items = await api("/approvals").catch(() => []);
   $("approvals").innerHTML = (items || []).map(a => `
@@ -322,9 +390,11 @@ async function boot() {
   renderBlotter();
   renderPnlPanels();
   renderConfig();
+  renderAnalysis();
   setInterval(tick, POLL_MS);
   setInterval(renderBlotter, POLL_MS * 4);
   setInterval(renderPnlPanels, POLL_MS * 10);
+  setInterval(renderAnalysis, POLL_MS * 10);
 }
 
 boot();

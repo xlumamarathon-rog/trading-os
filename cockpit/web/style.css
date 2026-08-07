@@ -75,3 +75,26 @@ td { padding: 7px 8px; border-bottom: 1px solid #151b28; font-size: 13px; }
 footer { display: flex; gap: 16px; padding: 10px 20px; border-top: 1px solid var(--edge);
   color: var(--dim); font-size: 12px; }
 .conn.ok { color: var(--green); } .conn.err { color: var(--red); }
+
+/* ---------- analysis panel (MODULES 56/57) ---------- */
+.analysis-grid { display: flex; flex-direction: column; gap: 10px; }
+.analysis-item { background: var(--bg); border: 1px solid var(--edge);
+  border-radius: 5px; padding: 9px 11px; }
+.analysis-head { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
+.analysis-head b { letter-spacing: .5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips .chip { background: #131a28; color: var(--text); border: 1px solid var(--edge);
+  border-radius: 4px; padding: 2px 7px; font-size: 11px; }
+.read { margin-left: auto; padding: 2px 9px; border-radius: 3px; font-size: 10px;
+  font-weight: 700; letter-spacing: 1px; }
+.read.bullish { background: #10281a; color: var(--green); }
+.read.bearish { background: #331214; color: var(--red); }
+.read.neutral { background: #1d2433; color: var(--dim); }
+.score { margin-left: auto; min-width: 34px; height: 34px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 700;
+  font-size: 13px; border: 2px solid currentColor; }
+.score.pos { color: var(--green); } .score.warn { color: var(--amber); } .score.neg { color: var(--red); }
+.flags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.flag { font-size: 10px; padding: 1px 7px; border-radius: 3px; text-transform: capitalize; }
+.flag.pos { background: #10281a; color: var(--green); }
+.flag.neg { background: #331214; color: var(--red); }
