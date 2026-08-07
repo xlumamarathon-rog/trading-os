@@ -18,6 +18,30 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+# Defense-in-depth redaction net for the /config endpoint. The provider is
+# supposed to hand us an already-sanitized view, but a careless deployer who
+# wires the raw config would otherwise leak broker keys / unlock phrases to
+# any viewer token. We strip anything whose key looks secret, at every depth,
+# so the gateway CANNOT serve a secret even if the provider slips.
+_SECRET_KEY_HINTS = ("apikey", "api_key", "secret", "password", "passwd",
+                     "token", "unlock_phrase", "private", "credential")
+
+
+def sanitize_config_view(value):
+    """Recursively redact secret-looking keys from a config view. Returns a
+    new structure; never mutates the input."""
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if any(hint in str(k).lower() for hint in _SECRET_KEY_HINTS):
+                out[k] = "***REDACTED***"
+            else:
+                out[k] = sanitize_config_view(v)
+        return out
+    if isinstance(value, (list, tuple)):
+        return [sanitize_config_view(v) for v in value]
+    return value
+
 
 class ControlRequest(BaseModel):
     confirm: str = ""              # confirmation phrase for destructive actions
@@ -51,8 +75,12 @@ def create_gateway(
 
         @app.get("/ui/{asset}")
         async def ui_asset(asset: str):
+            base = ui_path.resolve()
             target = (ui_path / asset).resolve()
-            if not str(target).startswith(str(ui_path.resolve())) or not target.is_file():
+            # is_relative_to (not str.startswith): a plain prefix check lets a
+            # SIBLING dir sharing the prefix through — e.g. base "…/web" would
+            # accept "…/web-secret/…". Confirmed traversal bypass, now closed.
+            if not target.is_relative_to(base) or not target.is_file():
                 raise HTTPException(status_code=404)
             return FileResponse(target)
 
@@ -106,9 +134,11 @@ def create_gateway(
 
     @app.get("/config")
     async def config_view(actor: dict = Depends(authed)):
-        """SANITIZED running config (viewer+). The provider owns redaction —
-        secrets must never reach this endpoint."""
-        return await config_view_fn() if config_view_fn else {}
+        """SANITIZED running config (viewer+). The provider owns redaction,
+        but we ALSO redact defensively here so a careless provider cannot
+        leak secrets to a viewer token."""
+        raw = await config_view_fn() if config_view_fn else {}
+        return sanitize_config_view(raw)
 
     # ---------- control side (operator only, audited) ----------
 

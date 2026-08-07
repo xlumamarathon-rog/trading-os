@@ -8,9 +8,11 @@ real aiomql wrapper (vendor source read per R1 before wiring).
 """
 from __future__ import annotations
 
+import os
+import secrets
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 
@@ -30,40 +32,56 @@ class StopIn(BaseModel):
     position_id: Optional[str] = None
 
 
-def create_mt5_service(mt5) -> FastAPI:
-    """mt5 interface: place_order, lookup_order, set_stop, modify_stop, close."""
+def create_mt5_service(mt5, *, auth_token: Optional[str] = None) -> FastAPI:
+    """mt5 interface: place_order, lookup_order, set_stop, modify_stop, close.
+
+    auth_token: shared secret required on every order/position endpoint via the
+    `X-MT5-Auth` header. This service can PLACE AND CLOSE REAL BROKER ORDERS, so
+    network isolation alone is not enough — a shared secret means a stray
+    process that reaches the port still cannot move money. Falls back to
+    MT5_SERVICE_TOKEN in the environment. When neither is set the guard is a
+    no-op (dev/off-Windows tests), but production deploy MUST set it — DEPLOY.md
+    §2. /health is always open for liveness probes.
+    """
+    token = auth_token or os.environ.get("MT5_SERVICE_TOKEN") or ""
     app = FastAPI(title="MT5 Exec Service", docs_url=None, redoc_url=None)
+
+    def require_auth(x_mt5_auth: str = Header(default="")) -> None:
+        if not token:
+            return  # unconfigured: preserve legacy behavior for tests/dev
+        if not secrets.compare_digest(x_mt5_auth, token):  # constant-time
+            raise HTTPException(status_code=401, detail="mt5 service auth failed")
 
     @app.get("/health")
     async def health():
         return {"status": "ok", "terminal_connected": await mt5.is_connected()}
 
     @app.post("/order")
-    async def order(body: OrderIn):
+    async def order(body: OrderIn, _: None = Depends(require_auth)):
         if not await mt5.is_connected():
             raise HTTPException(status_code=503, detail="mt5 terminal disconnected")
         result = await mt5.place_order(body.model_dump())
         return result   # {broker_order_id, filled_qty, avg_price}
 
     @app.get("/order/{client_order_id}")
-    async def order_lookup(client_order_id: str):
+    async def order_lookup(client_order_id: str, _: None = Depends(require_auth)):
         found = await mt5.lookup_order(client_order_id)
         if found is None:
             raise HTTPException(status_code=404, detail="unknown order")
         return found
 
     @app.post("/position/stop")
-    async def position_stop(body: StopIn):
+    async def position_stop(body: StopIn, _: None = Depends(require_auth)):
         pid = await mt5.set_stop(body.symbol, body.lots, body.sl)
         return {"position_id": pid}
 
     @app.post("/position/modify")
-    async def position_modify(body: StopIn):
+    async def position_modify(body: StopIn, _: None = Depends(require_auth)):
         await mt5.modify_stop(body.position_id, body.sl)
         return {"ok": True}
 
     @app.post("/position/close")
-    async def position_close(body: StopIn):
+    async def position_close(body: StopIn, _: None = Depends(require_auth)):
         await mt5.close(body.symbol, body.lots)
         return {"ok": True}
 

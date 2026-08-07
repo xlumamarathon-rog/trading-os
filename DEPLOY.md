@@ -21,7 +21,12 @@
 2. **Windows MT5 VPS** — provision in your broker's Equinix site (ask support: LD4/NY4/AMS).
    Install MT5 terminal, log in, then Python 3.11 + `pip install aiomql fastapi uvicorn`.
    Deploy `mt5_service/`; run `uvicorn mt5_service.app:app` behind the private network + TLS.
-   **Verify:** `/health` from Linux core shows `terminal_connected: true`; ping-to-broker <2ms.
+   **Set `MT5_SERVICE_TOKEN`** (same value on the Linux core and this service): the
+   `/order` and `/position/*` endpoints place and close REAL orders, so they require
+   the `X-MT5-Auth` header — TLS + private network is not the only line of defense.
+   Without the token set the guard is a no-op (dev only); in production it is mandatory.
+   **Verify:** `/health` from Linux core shows `terminal_connected: true`; ping-to-broker <2ms;
+   an `/order` call WITHOUT the header returns 401.
 
 3. **OpenAlgo server** (Linux core, localhost): follow vendor/openalgo docs — connect YOUR
    broker (Dhan/Shoonya/Fyers/Zerodha), whitelist the static IP with the broker
