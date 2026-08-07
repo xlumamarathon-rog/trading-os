@@ -46,6 +46,7 @@ from src.ops.paper_report import advance_gate
 from src.ops.paper_server import create_paper_server
 from src.ops.persistence import JsonlAuditLog
 from src.core.budget_manager import BudgetManager
+from src.ops.metrics import annual_volatility, calmar_ratio, sortino_ratio
 from src.ops.session_guard import SessionGuard
 from src.risk.portfolio_heat import PortfolioHeatManager
 
@@ -381,6 +382,12 @@ async def run():
         "return_pct": round((eq[-1] / base_equity - 1) * 100, 2),
         "MAX_DRAWDOWN_pct": round(mdd * 100, 2),
         "sharpe_annualized": round(sharpe, 2),
+        # Aug-8 enrichment: reference-validated (empyrical-parity) risk-adjusted
+        # metrics we previously didn't report. Existing fields above are
+        # untouched — our Sharpe/MDD were already exact vs empyrical.
+        "sortino_annualized": round(sortino_ratio(rets), 2),
+        "calmar_ratio": round(calmar_ratio(eq), 2),
+        "annual_vol_pct": round(annual_volatility(rets) * 100, 2),
         "buy_hold_equal_weight_return_pct": round(bh, 2),
         "entries": entries, "fills": len(broker.fills),
         "throttled_days": throttled_days,
