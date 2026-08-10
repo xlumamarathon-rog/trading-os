@@ -164,3 +164,33 @@ router's session_open_fn hook (M21) was never wired.
   independent NSE-session recomputation); gateway probe 30/30;
   research_replay tsmom/india JSON-identical to main; go_live_check still
   exits 1 with exactly the 3 human items.
+
+---
+
+## 2026-08-10 (later) — Cockpit v2.1: trade controls, research lab, runnable paper server
+
+Operator feedback: kill switch too slow under stress (typed phrase), no
+per-trade close, no manual ticket, no in-product backtesting — and the
+deeper find: `--mode paper` exits immediately; the repo never had a
+runnable paper process (why the operator lived in the demo app).
+
+- **ExitManager.manual_exit** — public single-position close via the real
+  exit path (cancel resting stop -> market-out; fail-loud on unknowns).
+- **M62 quote_feed.py** — credential-free feed replaying bundled REAL OHLC
+  tick-by-tick inside true bar ranges; session-aware (closed legs freeze).
+- **M63 research_lab.py** — backtests from the cockpit on the certified
+  research_replay harness; allowlisted strategy×dataset, single-flight.
+- **M64 gateway** — /candles, /control/close_position (per-symbol typed
+  confirm), /control/order (full router path), /research/run|runs; ALL
+  injected providers now sync/async-tolerant (_maybe_await — the Aug-6
+  seam class struck again, caught by the new assembly test).
+- **scripts/run_paper.py** — THE missing product entrypoint: one command
+  assembles feed + runtime + gateway + cockpit at /ui. Smoke-verified
+  live: order placed, filled, closed, audited via HTTP.
+- **Kill UX** — modal + arm-delay (two deliberate clicks, no typing);
+  friction stays on the risk-increasing side (unlock phrase untouched).
+  Gateway API contract unchanged.
+- Cockpit: per-row CLOSE with armed confirm, manual trade ticket
+  (mandatory stop, router rejections shown verbatim), Research page.
+- Tests: 455 passed / 1 skipped (+15); UI harness 62 checks (+17);
+  replay JSON-identical; go_live_check still exits 1 with 3 human items.

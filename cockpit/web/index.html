@@ -16,6 +16,7 @@
     <a class="nav-item" id="nav-pnl" href="#/pnl">Σ P&amp;L</a>
     <a class="nav-item" id="nav-history" href="#/history">≡ History</a>
     <a class="nav-item" id="nav-markets" href="#/markets">◔ Markets</a>
+    <a class="nav-item" id="nav-research" href="#/research">◎ Research</a>
     <a class="nav-item" id="nav-ops" href="#/ops">⚙ Operations</a>
     <a class="nav-item" id="nav-settings" href="#/settings">⛭ Settings</a>
   </nav>
@@ -53,10 +54,16 @@
 
     <div class="grid-2">
       <div class="card">
-        <h3>Open positions <span class="sub">· exit states</span></h3>
+        <h3>Open positions <span class="sub">· exit states · per-trade close</span></h3>
         <table id="positions"><thead><tr>
           <th>symbol</th><th>leg</th><th>qty</th><th>entry</th><th>stop</th>
-          <th>R now</th><th>state</th><th>MFE</th></tr></thead><tbody></tbody></table>
+          <th>R now</th><th>state</th><th>MFE</th><th></th></tr></thead><tbody></tbody></table>
+        <div id="close-confirm" class="hidden close-confirm">
+          <p>Close <b id="close-symbol">—</b> at market? The resting stop is
+            cancelled first — the position cannot be left naked.</p>
+          <button id="close-go" class="kill" disabled>CONFIRM CLOSE</button>
+          <button id="close-cancel" class="ghost">cancel</button>
+        </div>
       </div>
       <div class="card">
         <h3>Alerts <span class="sub">· acknowledge to clear</span></h3>
@@ -64,6 +71,27 @@
         <h3 class="mt">Workers</h3>
         <div id="workers" class="workers">—</div>
       </div>
+    </div>
+
+    <div class="card">
+      <h3>Trade ticket <span class="sub">· full router path — kill switch, session
+        clock, guards, sizing, margin</span></h3>
+      <div class="filters">
+        <select id="tk-symbol"></select>
+        <select id="tk-direction">
+          <option value="buy">buy</option>
+          <option value="sell">sell</option>
+        </select>
+        <input id="tk-stop" placeholder="protective stop (required)">
+        <input id="tk-qty" placeholder="qty (blank = sizer)">
+        <button id="tk-place" class="ghost">PLACE ORDER</button>
+      </div>
+      <div id="tk-confirm" class="hidden close-confirm">
+        <p>Send <b id="tk-summary">—</b> through the live order path?</p>
+        <button id="tk-go" class="kill" disabled>CONFIRM ORDER</button>
+        <button id="tk-cancel" class="ghost">cancel</button>
+      </div>
+      <div id="tk-msg" class="sub"></div>
     </div>
   </section>
 
@@ -180,6 +208,27 @@
     </div>
   </section>
 
+  <!-- ==================== RESEARCH ==================== -->
+  <section class="page hidden" id="page-research">
+    <div class="card">
+      <h3>Backtest lab <span class="sub">· every run is the certified harness —
+        full stack, real costs, reconciliation-CLEAN or it fails</span></h3>
+      <div class="filters">
+        <select id="rs-strategy"></select>
+        <select id="rs-dataset"></select>
+        <button id="rs-run" class="ghost">RUN BACKTEST</button>
+      </div>
+      <div id="rs-msg" class="sub"></div>
+    </div>
+    <div class="card">
+      <h3>Runs</h3>
+      <table id="rs-table"><thead><tr>
+        <th>run</th><th>status</th><th>return</th><th>maxDD</th><th>sharpe</th>
+        <th>win rate</th><th>trades</th><th>recon</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
   <!-- ==================== OPERATIONS ==================== -->
   <section class="page hidden" id="page-ops">
     <div class="grid-2">
@@ -187,11 +236,12 @@
         <h3>Emergency</h3>
         <button id="kill-btn" class="kill" disabled>KILL SWITCH</button>
         <div id="kill-confirm" class="hidden">
-          <p>Type <code>KILL ALL POSITIONS</code> to confirm:</p>
-          <input id="kill-phrase" autocomplete="off" placeholder="confirmation phrase">
+          <p>Flatten <b>every position</b>, cancel all orders, halt entries?</p>
           <input id="kill-reason" autocomplete="off" placeholder="reason (logged)">
-          <button id="kill-go" class="kill">CONFIRM KILL</button>
+          <button id="kill-go" class="kill" disabled>CONFIRM — KILL ALL POSITIONS</button>
           <button id="kill-cancel" class="ghost">cancel</button>
+          <p class="sub">Confirm arms in a moment — two deliberate clicks, no typing.
+            Unlocking afterwards needs the operator unlock phrase.</p>
         </div>
         <div id="unlock-panel" class="hidden">
           <p>Enter unlock phrase:</p>

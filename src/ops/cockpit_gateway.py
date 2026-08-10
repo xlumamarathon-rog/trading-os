@@ -11,12 +11,24 @@ snapshot provider (deltas on the VPS deployment).
 """
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Callable, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+
+
+async def _maybe_await(result):
+    """Injected providers may be sync OR async — the same tolerance the
+    guard stack and WorkerSupervisor learned in the Aug-6 seam hunt. A
+    natural assembly wires plain lambdas; awaiting a list is a TypeError
+    that only fires in production wiring, never in unit tests that pass
+    async mocks."""
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 # Defense-in-depth redaction net for the /config endpoint. The provider is
 # supposed to hand us an already-sanitized view, but a careless deployer who
@@ -57,6 +69,30 @@ class BrokerSaveRequest(BaseModel):
     settings: dict = {}
 
 
+class ClosePositionRequest(BaseModel):
+    """Body for /control/close_position — close ONE open position."""
+    symbol: str = ""
+    confirm: str = ""              # must equal "CLOSE <symbol>"
+    reason: str = ""
+
+
+class OrderTicketRequest(BaseModel):
+    """Body for /control/order — a MANUAL entry through the FULL router
+    (kill switch, session clock, guards, sizing, margin — no shortcuts)."""
+    symbol: str = ""
+    direction: str = ""            # "buy" | "sell"
+    stop: float = 0.0
+    qty: float = 0.0               # 0 = let the position sizer decide
+    confirm: str = ""              # must equal "PLACE <symbol>"
+    reason: str = ""
+
+
+class ResearchRunRequest(BaseModel):
+    """Body for /research/run — allowlisted strategy × dataset backtest."""
+    strategy: str = ""
+    dataset: str = ""
+
+
 def create_gateway(
     *,
     tokens: dict[str, str],                    # token -> role ("viewer" | "operator")
@@ -79,6 +115,11 @@ def create_gateway(
     brokers_status_fn: Optional[Callable] = None,  # -> broker cards, NO secrets
     broker_test_fn: Optional[Callable] = None,  # (name) -> {ok, detail}
     broker_save_fn: Optional[Callable] = None,  # (name, settings, actor) -> saved
+    # ---- cockpit v2.1 (MODULE 64) — trade controls + research lab
+    candles_fn: Optional[Callable] = None,      # (symbol, n) -> [{ts,o,h,l,c}]
+    close_position_fn: Optional[Callable] = None,   # (symbol, reason) -> dict
+    place_order_fn: Optional[Callable] = None,  # (ticket dict, actor) -> dict
+    research_lab=None,                          # MODULE 63 ResearchLab
 ) -> FastAPI:
     app = FastAPI(title="Trading OS Cockpit Gateway", docs_url=None, redoc_url=None)
 
@@ -121,7 +162,7 @@ def create_gateway(
 
     @app.get("/state")
     async def state(actor: dict = Depends(authed)):
-        snap = await snapshot_fn()
+        snap = await _maybe_await(snapshot_fn())
         snap["halted"] = await kill_switch.is_halted()
         # per-CALLER role, not whatever placeholder the snapshot carries —
         # the cockpits gate every operator control on this field
@@ -136,25 +177,25 @@ def create_gateway(
 
     @app.get("/approvals")
     async def approvals(actor: dict = Depends(authed)):
-        return await approvals_fn() if approvals_fn else []
+        return await _maybe_await(approvals_fn()) if approvals_fn else []
 
     @app.get("/trades")
     async def trades(actor: dict = Depends(authed)):
         """Trade blotter (viewer+): recent closed trades with R, exit reason,
         MFE captured — the operator's ground-truth view of exit quality."""
-        return await trades_fn() if trades_fn else []
+        return await _maybe_await(trades_fn()) if trades_fn else []
 
     @app.get("/pnl_history")
     async def pnl_history(actor: dict = Depends(authed)):
         """Daily equity closes (viewer+) — feeds the P&L calendar."""
-        return await pnl_history_fn() if pnl_history_fn else []
+        return await _maybe_await(pnl_history_fn()) if pnl_history_fn else []
 
     @app.get("/config")
     async def config_view(actor: dict = Depends(authed)):
         """SANITIZED running config (viewer+). The provider owns redaction,
         but we ALSO redact defensively here so a careless provider cannot
         leak secrets to a viewer token."""
-        raw = await config_view_fn() if config_view_fn else {}
+        raw = await _maybe_await(config_view_fn()) if config_view_fn else {}
         return sanitize_config_view(raw)
 
     # ---------- cockpit v2 read side (MODULE 59, viewer+) ----------
@@ -172,7 +213,7 @@ def create_gateway(
     async def portfolio(actor: dict = Depends(authed)):
         """Portfolio view: open positions w/ exit states, per-leg exposure,
         realized + unrealized split — the operator's book at a glance."""
-        return await portfolio_fn() if portfolio_fn else {}
+        return await _maybe_await(portfolio_fn()) if portfolio_fn else {}
 
     @app.get("/history")
     async def history(actor: dict = Depends(authed), symbol: str = "",
@@ -182,7 +223,7 @@ def create_gateway(
         filters optional; server caps the row count."""
         if history_fn is None:
             return []
-        rows = await history_fn()
+        rows = await _maybe_await(history_fn())
         def keep(r):
             if symbol and str(r.get("symbol", "")).upper() != symbol.upper():
                 return False
@@ -203,8 +244,27 @@ def create_gateway(
         """Broker connection cards: provider, reachability, which credential
         env-vars are SET (booleans only — never values). Defensively
         sanitized so a careless provider cannot leak a secret."""
-        raw = await brokers_status_fn() if brokers_status_fn else {}
+        raw = await _maybe_await(brokers_status_fn()) if brokers_status_fn else {}
         return sanitize_config_view(raw)
+
+    @app.get("/candles")
+    async def candles(actor: dict = Depends(authed), symbol: str = "",
+                      n: int = 96):
+        """Real price candles from the wired feed (replay-of-real-history in
+        the bundled paper assembly; broker quotes on the VPS). Never
+        synthetic client-side randomness again."""
+        if candles_fn is None or not symbol:
+            return []
+        return await _maybe_await(candles_fn(symbol, max(2, min(int(n), 500))))
+
+    @app.get("/research/runs")
+    async def research_runs(actor: dict = Depends(authed)):
+        """Backtest catalog (viewer+): every run is a real research_replay
+        subprocess; results carry reconciliation + audit-chain status."""
+        if research_lab is None:
+            return {"runs": [], "options": {"strategies": [], "datasets": [],
+                                            "busy": False}}
+        return {"runs": research_lab.runs(), "options": research_lab.options()}
 
     # ---------- control side (operator only, audited) ----------
 
@@ -219,7 +279,7 @@ def create_gateway(
         service). Never sends credentials from the request."""
         if broker_test_fn is None:
             raise HTTPException(status_code=501, detail="not wired")
-        result = await broker_test_fn(req.broker)
+        result = await _maybe_await(broker_test_fn(req.broker))
         await _audit(actor, "broker_test", {"broker": req.broker,
                                             "ok": bool(result.get("ok"))})
         return result
@@ -243,8 +303,8 @@ def create_gateway(
                 status_code=403,
                 detail=f"gate-controlled keys refused: {sorted(bad)} — "
                        "these are earned on the VPS, never set from the UI")
-        saved = await broker_save_fn(req.broker, req.settings,
-                                     actor["token_tail"])
+        saved = await _maybe_await(broker_save_fn(req.broker, req.settings,
+                                               actor["token_tail"]))
         await _audit(actor, "broker_save", {"broker": req.broker,
                                             "keys": sorted(map(str, req.settings))})
         return sanitize_config_view(saved)
@@ -274,7 +334,7 @@ def create_gateway(
     async def pause(req: ControlRequest, actor: dict = Depends(operator_only)):
         if pause_entries_fn is None:
             raise HTTPException(status_code=501, detail="not wired")
-        await pause_entries_fn(req.reason or "cockpit manual pause")
+        await _maybe_await(pause_entries_fn(req.reason or "cockpit manual pause"))
         await _audit(actor, "pause_entries", {"reason": req.reason})
         return {"paused": True}
 
@@ -283,7 +343,7 @@ def create_gateway(
         """Safe-start release: a fresh LIVE process trades only after this click."""
         if resume_entries_fn is None:
             raise HTTPException(status_code=501, detail="not wired")
-        await resume_entries_fn(actor["token_tail"])
+        await _maybe_await(resume_entries_fn(actor["token_tail"]))
         await _audit(actor, "resume_entries", {"reason": req.reason})
         return {"entries_resumed": True}
 
@@ -292,8 +352,74 @@ def create_gateway(
                       actor: dict = Depends(operator_only)):
         if approve_fn is None:
             raise HTTPException(status_code=501, detail="not wired")
-        await approve_fn(approval_id, actor["token_tail"])
+        await _maybe_await(approve_fn(approval_id, actor["token_tail"]))
         await _audit(actor, "approve", {"approval_id": approval_id})
         return {"approved": approval_id}
+
+    # ---------- trade controls (MODULE 64, operator only, audited) ----------
+
+    @app.post("/control/close_position")
+    async def close_position(req: ClosePositionRequest,
+                             actor: dict = Depends(operator_only)):
+        """Close ONE position through the real exit path (cancel resting
+        stop, market-out). Typed per-symbol confirmation: closing RELIANCE
+        requires the phrase CLOSE RELIANCE — cheap to type under stress,
+        impossible to fat-finger onto the wrong row."""
+        if close_position_fn is None:
+            raise HTTPException(status_code=501, detail="not wired")
+        expected = f"CLOSE {req.symbol}".strip()
+        if not req.symbol or req.confirm != expected:
+            raise HTTPException(status_code=400,
+                                detail=f'confirmation phrase required: "{expected}"')
+        try:
+            result = await _maybe_await(close_position_fn(
+                req.symbol, req.reason or "cockpit manual close"))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        await _audit(actor, "close_position",
+                     {"symbol": req.symbol, "reason": req.reason})
+        return result
+
+    @app.post("/control/order")
+    async def place_order(req: OrderTicketRequest,
+                          actor: dict = Depends(operator_only)):
+        """Manual order ticket. The gateway does ZERO sizing or validation
+        beyond intent confirmation — the ticket goes through the FULL
+        OrderRouter door: kill switch, anomaly pause, session clock,
+        portfolio guards, position sizer, margin. A rejection reason comes
+        back verbatim; nothing is silently dropped."""
+        if place_order_fn is None:
+            raise HTTPException(status_code=501, detail="not wired")
+        expected = f"PLACE {req.symbol}".strip()
+        if not req.symbol or req.confirm != expected:
+            raise HTTPException(status_code=400,
+                                detail=f'confirmation phrase required: "{expected}"')
+        if req.direction not in ("buy", "sell"):
+            raise HTTPException(status_code=400, detail="direction must be buy|sell")
+        if req.stop <= 0:
+            raise HTTPException(status_code=400, detail="a protective stop is mandatory")
+        result = await _maybe_await(place_order_fn(
+            {"symbol": req.symbol, "direction": req.direction,
+             "stop": req.stop, "qty": req.qty}, actor["token_tail"]))
+        await _audit(actor, "place_order",
+                     {"symbol": req.symbol, "direction": req.direction,
+                      "accepted": bool(result.get("accepted"))})
+        return result
+
+    @app.post("/research/run")
+    async def research_run(req: ResearchRunRequest,
+                           actor: dict = Depends(operator_only)):
+        """Launch an allowlisted backtest on the certified harness."""
+        if research_lab is None:
+            raise HTTPException(status_code=501, detail="not wired")
+        try:
+            meta = await research_lab.start(req.strategy, req.dataset,
+                                            actor["token_tail"])
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await _audit(actor, "research_run",
+                     {"strategy": req.strategy, "dataset": req.dataset,
+                      "run_id": meta["id"]})
+        return meta
 
     return app

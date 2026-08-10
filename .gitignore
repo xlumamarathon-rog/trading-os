@@ -7,3 +7,4 @@ __pycache__/
 /vendor/*
 !/vendor/MANIFEST.md
 config/brokers_local.yaml   # MODULE 60 deployment overlay (never committed)
+data/runtime/   # live/paper runtime state (audit, gate, sentinel) — never committed

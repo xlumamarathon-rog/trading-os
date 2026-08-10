@@ -19,6 +19,19 @@
 const DEMO = new URLSearchParams(location.search).has("demo");
 const POLL_MS = 3000;
 const KILL_PHRASE = "KILL ALL POSITIONS";
+/* Destructive confirms ARM after a short delay instead of demanding typed
+ * phrases (operator feedback, 2026-08-10): under real stress, typing an
+ * exact 18-char phrase is slower and MORE error-prone than two deliberate
+ * clicks. The arm delay defeats double-click accidents; the spec's friction
+ * budget stays on the risk-INCREASING side (unlock phrase, resume, go-live),
+ * not on the airbag. The gateway API still requires its confirm phrase —
+ * the UI supplies it after explicit human confirmation. */
+const ARM_MS = 700;
+
+function armButton(btn) {
+  btn.disabled = true;
+  setTimeout(() => { btn.disabled = false; }, ARM_MS);
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -37,7 +50,8 @@ const state = { token: storage.getItem("cockpit_token") || "", role: null,
 /* ---------------- hash router (CRM shell) ----------------
  * The ui_flow_test DOM shim has no location.hash and no addEventListener —
  * both must degrade: undefined hash -> dashboard; no listener -> static page. */
-const PAGES = ["dashboard", "portfolio", "pnl", "history", "markets", "ops", "settings"];
+const PAGES = ["dashboard", "portfolio", "pnl", "history", "markets",
+               "research", "ops", "settings"];
 
 function currentPage() {
   const h = (typeof location !== "undefined" && typeof location.hash === "string")
@@ -254,6 +268,50 @@ function demoApi(path, opts) {
   }
   if (path === "/control/kill") { demo.halted = true; return Promise.resolve({ ok: true }); }
   if (path === "/control/unlock") { demo.halted = false; return Promise.resolve({ halted: false }); }
+  if (path === "/control/close_position") {
+    const body = JSON.parse(opts.body || "{}");
+    const pos = demo.positions.find(p => p.symbol === body.symbol);
+    if (!pos) return Promise.reject(new Error("http_404"));
+    demo.positions = demo.positions.filter(p => p !== pos);
+    demo.history.unshift({ date: new Date().toISOString().slice(0, 10),
+      symbol: pos.symbol, leg: pos.leg, direction: pos.symbol ? "buy" : "",
+      realized_r: pos.r_now ?? 0, exit_reason: "manual_close", sleeve: "manual" });
+    return Promise.resolve({ symbol: pos.symbol, reason: "manual_close",
+                             realized_r: pos.r_now ?? 0 });
+  }
+  if (path === "/control/order") {
+    const body = JSON.parse(opts.body || "{}");
+    if (!legOpenNow(CANDLE_LEG[body.symbol] ??
+        ({ RELIANCE: "india", TCS: "india", HDFCBANK: "india" }[body.symbol] || "mt5_crypto"))) {
+      return Promise.resolve({ accepted: false,
+                               reason: "precheck_failed:session_failed" });
+    }
+    const entry = (demoCandles[body.symbol]
+      ? demoCandles[body.symbol][demoCandles[body.symbol].length - 1].c : 100);
+    demo.positions.push({ symbol: body.symbol, leg: CANDLE_LEG[body.symbol] || "india",
+      qty: body.qty || 10, entry, stop: body.stop, r_now: 0.0,
+      state: "RISK_ON", mfe_r: 0.0 });
+    return Promise.resolve({ accepted: true, qty: body.qty || 10,
+                             avg_fill_price: entry });
+  }
+  if (path === "/research/runs") {
+    return Promise.resolve({ runs: demo.researchRuns || [], options: {
+      strategies: ["baseline", "tsmom", "tsmom_f", "donchian", "rsi2",
+                   "improved", "improved2", "improved3", "accurate", "accurate_ls"],
+      datasets: ["india_6m", "forex_6m", "crypto_6m", "covid_2020",
+                 "gfc_2008", "flash_crash_2012"], busy: false } });
+  }
+  if (path === "/research/run") {
+    const body = JSON.parse(opts.body || "{}");
+    demo.researchRuns = demo.researchRuns || [];
+    demo.researchRuns.unshift({ id: `${body.strategy}_${body.dataset}_demo`,
+      strategy: body.strategy, dataset: body.dataset, status: "done",
+      results: { return_pct: 1.15, MAX_DRAWDOWN_pct: 0.82,
+                 sharpe_annualized: 1.41, win_rate_pct: 57.9,
+                 closed_trades: 38, reconciliation: "CLEAN",
+                 audit_chain_ok: true } });
+    return Promise.resolve(demo.researchRuns[0]);
+  }
   if (path.startsWith("/control/approve/")) {
     demo.approvals = demo.approvals.filter(a => `/control/approve/${a.id}` !== path);
     return Promise.resolve({ ok: true });
@@ -298,13 +356,19 @@ function render(s) {
     .join("") || "—";
 
   const tbody = $("positions").querySelector("tbody");
+  const canClose = state.role === "operator" && !s.halted;
   tbody.innerHTML = (s.positions || []).map(p => `
     <tr><td>${esc(p.symbol)}</td><td>${esc(p.leg)}</td><td>${esc(p.qty)}</td>
     <td>${esc(p.entry)}</td><td>${esc(p.stop)}</td>
     <td class="${p.r_now >= 0 ? "pos" : "neg"}">${(p.r_now ?? 0).toFixed(1)}R</td>
     <td><span class="state ${esc(p.state)}">${esc(p.state)}</span></td>
-    <td>${(p.mfe_r ?? 0).toFixed(1)}R</td></tr>`).join("")
-    || `<tr><td colspan="8" class="sub">no open positions</td></tr>`;
+    <td>${(p.mfe_r ?? 0).toFixed(1)}R</td>
+    <td>${canClose
+      ? `<button class="ghost small row-close pos-close" data-sym="${esc(p.symbol)}">CLOSE</button>`
+      : ""}</td></tr>`).join("")
+    || `<tr><td colspan="9" class="sub">no open positions</td></tr>`;
+  document.querySelectorAll(".pos-close").forEach(btn =>
+    btn.addEventListener("click", () => openCloseConfirm(btn.dataset.sym)));
 
   $("events").innerHTML = (s.events || [])
     .filter(e => !state.ackedEvents.has(`${e.t}|${e.m}`))
@@ -412,6 +476,123 @@ function renderPortfolio(s) {
       <span>${pct.toFixed(0)}%</span>
       <span class="${open ? "pos" : "neg"}">${open ? "open" : "closed"}</span></div>`;
   }).join("") || `<div class="sub">no open positions</div>`;
+}
+
+/* ---------------- per-position close (v2.1) ---------------- */
+
+function openCloseConfirm(symbol) {
+  state.closeSymbol = symbol;
+  $("close-symbol").textContent = symbol;
+  $("close-confirm").classList.remove("hidden");
+  armButton($("close-go"));
+}
+
+async function confirmClose() {
+  if ($("close-go").disabled) return;     // not armed yet — defensive
+  const sym = state.closeSymbol;
+  if (!sym) return;
+  const r = await api("/control/close_position", { method: "POST",
+    body: JSON.stringify({ symbol: sym, confirm: `CLOSE ${sym}`,
+                           reason: "cockpit manual close" }) })
+    .catch(e => ({ error: e.message }));
+  $("close-confirm").classList.add("hidden");
+  state.closeSymbol = null;
+  if (!r.error) { tick(); renderBlotter(); renderHistory(); }
+}
+
+/* ---------------- manual trade ticket (v2.1) ---------------- */
+
+function ticketSymbols(s) {
+  const feed = (s && s.feed && s.feed.symbols) ? Object.keys(s.feed.symbols) : [];
+  const fallback = ["RELIANCE", "TCS", "HDFCBANK", "EURUSD", "GBPUSD",
+                    "USDJPY", "BTCUSD", "ETHUSD"];
+  const syms = feed.length ? feed : fallback;
+  const sel = $("tk-symbol");
+  const have = sel.dataset.syms || "";
+  if (have !== syms.join(",")) {
+    sel.dataset.syms = syms.join(",");
+    sel.innerHTML = syms.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  }
+}
+
+function openTicketConfirm() {
+  const sym = $("tk-symbol").value, dir = $("tk-direction").value;
+  const stop = parseFloat($("tk-stop").value);
+  if (!sym || !(stop > 0)) {
+    $("tk-msg").textContent = "✗ a protective stop is mandatory";
+    return;
+  }
+  $("tk-summary").textContent =
+    `${dir.toUpperCase()} ${sym} @ market · stop ${stop}`;
+  $("tk-confirm").classList.remove("hidden");
+  armButton($("tk-go"));
+}
+
+async function confirmTicket() {
+  if ($("tk-go").disabled) return;        // not armed yet — defensive
+  const sym = $("tk-symbol").value;
+  const body = { symbol: sym, direction: $("tk-direction").value,
+                 stop: parseFloat($("tk-stop").value) || 0,
+                 qty: parseFloat($("tk-qty").value) || 0,
+                 confirm: `PLACE ${sym}` };
+  const r = await api("/control/order", { method: "POST",
+    body: JSON.stringify(body) }).catch(e => ({ error: e.message }));
+  $("tk-confirm").classList.add("hidden");
+  if (r.error) {
+    $("tk-msg").textContent = r.error === "forbidden"
+      ? "✗ operator token required" : `✗ ${r.error}`;
+  } else if (r.accepted) {
+    $("tk-msg").textContent = `✓ filled x${r.qty} @ ${r.avg_fill_price}`;
+    $("tk-stop").value = ""; $("tk-qty").value = "";
+  } else {
+    // the router's rejection reason verbatim — session:india_closed,
+    // budget_exhausted, margin, heat cap … the operator sees WHY
+    $("tk-msg").textContent = `✗ refused: ${r.reason || "unknown"}`;
+  }
+  tick();
+}
+
+/* ---------------- research lab (v2.1) ---------------- */
+
+async function renderResearch() {
+  const data = await api("/research/runs").catch(() => null);
+  if (!data) return;
+  const opts = data.options || {};
+  const fill = (id, items) => {
+    const sel = $(id), key = (items || []).join(",");
+    if (sel.dataset.opts !== key) {
+      sel.dataset.opts = key;
+      sel.innerHTML = (items || []).map(x =>
+        `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+    }
+  };
+  fill("rs-strategy", opts.strategies);
+  fill("rs-dataset", opts.datasets);
+  $("rs-run").disabled = !!opts.busy || state.role !== "operator";
+
+  const fmt = (v, digits = 2) => (v == null ? "—" : Number(v).toFixed(digits));
+  $("rs-table").querySelector("tbody").innerHTML = (data.runs || []).map(r => {
+    const res = r.results || {};
+    return `<tr><td>${esc(r.strategy)} · ${esc(r.dataset)}</td>
+      <td class="${r.status === "done" ? "pos" : r.status === "failed" ? "neg" : "warn"}">${esc(r.status)}</td>
+      <td class="${(res.return_pct ?? 0) >= 0 ? "pos" : "neg"}">${fmt(res.return_pct)}%</td>
+      <td>${fmt(res.MAX_DRAWDOWN_pct)}%</td>
+      <td>${fmt(res.sharpe_annualized)}</td>
+      <td>${fmt(res.win_rate_pct, 0)}%</td>
+      <td>${esc(res.closed_trades ?? "—")}</td>
+      <td class="${res.reconciliation === "CLEAN" ? "pos" : "neg"}">${esc(res.reconciliation || "—")}</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="sub">no runs yet — pick a strategy and dataset above</td></tr>`;
+}
+
+async function launchResearch() {
+  const r = await api("/research/run", { method: "POST",
+    body: JSON.stringify({ strategy: $("rs-strategy").value,
+                           dataset: $("rs-dataset").value }) })
+    .catch(e => ({ error: e.message }));
+  $("rs-msg").textContent = r.error
+    ? (r.error === "forbidden" ? "✗ operator token required" : `✗ ${r.error}`)
+    : `✓ running ${r.id} — the certified harness is replaying real data, refresh in a minute`;
+  renderResearch();
 }
 
 /* ---------------- go-live gate (read-only report) ---------------- */
@@ -675,6 +856,7 @@ async function tick() {
     $("role").textContent = state.role || "viewer";
     render(s);
     renderCharts();
+    ticketSymbols(s);
   } catch (err) {
     $("conn").textContent = err.message === "auth" ? "invalid token" : "gateway unreachable";
     $("conn").className = "conn err";
@@ -700,10 +882,16 @@ function wire() {
     tick(); renderApprovals(); renderBrokers();
   });
 
-  $("kill-btn").addEventListener("click", () => $("kill-confirm").classList.remove("hidden"));
+  // KILL: click -> confirm dialog -> (arms after ARM_MS) -> one click kills.
+  // No typing under stress; the API's confirm phrase is supplied by the UI
+  // after the explicit second click. Unlock friction is untouched.
+  $("kill-btn").addEventListener("click", () => {
+    $("kill-confirm").classList.remove("hidden");
+    armButton($("kill-go"));
+  });
   $("kill-cancel").addEventListener("click", () => $("kill-confirm").classList.add("hidden"));
   $("kill-go").addEventListener("click", async () => {
-    if ($("kill-phrase").value !== KILL_PHRASE) { $("kill-phrase").value = ""; return; }
+    if ($("kill-go").disabled) return;      // not armed yet — defensive
     await api("/control/kill", { method: "POST",
       body: JSON.stringify({ confirm: KILL_PHRASE, reason: $("kill-reason").value }) });
     $("kill-confirm").classList.add("hidden");
@@ -736,6 +924,18 @@ function wire() {
     $("pause-confirm").classList.add("hidden");
     tick();
   });
+
+  // per-position close + trade ticket (v2.1)
+  $("close-go").addEventListener("click", confirmClose);
+  $("close-cancel").addEventListener("click", () => {
+    $("close-confirm").classList.add("hidden"); state.closeSymbol = null;
+  });
+  $("tk-place").addEventListener("click", openTicketConfirm);
+  $("tk-go").addEventListener("click", confirmTicket);
+  $("tk-cancel").addEventListener("click", () => $("tk-confirm").classList.add("hidden"));
+
+  // research lab
+  $("rs-run").addEventListener("click", launchResearch);
 
   // history screener
   $("f-apply").addEventListener("click", renderHistory);
@@ -792,6 +992,8 @@ async function boot() {
   renderBrokers();
   renderConfig();
   renderAnalysis();
+  renderResearch();
+  setInterval(renderResearch, POLL_MS * 8);
   setInterval(renderClock, POLL_MS * 5);
   setInterval(renderBlotter, POLL_MS * 4);
   setInterval(renderPnlPanels, POLL_MS * 10);

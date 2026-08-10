@@ -47,9 +47,11 @@ const $id = (id) => els[id] ?? (els[id] = new El(id));
 ].forEach($id);
 
 const approveButtons = [];
+const closeButtons = [];
 global.document = {
   getElementById: $id,
-  querySelectorAll: (sel) => (sel === ".approve" ? approveButtons.splice(0) : []),
+  querySelectorAll: (sel) => (sel === ".approve" ? approveButtons.splice(0)
+    : sel === ".pos-close" ? closeButtons.slice(0) : []),
 };
 global.location = { search: "?demo=1" };
 global.window = global;
@@ -67,6 +69,21 @@ Object.defineProperty(approvalsEl, "innerHTML", {
       const b = new El(`approve:${m[1]}`);
       b.dataset.id = m[1];
       approveButtons.push(b);
+    }
+  },
+  get() { return this._html; },
+});
+
+// intercept positions tbody innerHTML to synthesize per-row CLOSE buttons
+const positionsBody = $id("positions").querySelector("tbody");
+Object.defineProperty(positionsBody, "innerHTML", {
+  set(v) {
+    this._html = String(v);
+    closeButtons.length = 0;
+    for (const m of this._html.matchAll(/data-sym="([^"]+)"/g)) {
+      const b = new El(`pos-close:${m[1]}`);
+      b.dataset.sym = m[1];
+      closeButtons.push(b);
     }
   },
   get() { return this._html; },
@@ -97,21 +114,21 @@ const { default: _ } = { default: null };
 check("innerHTML sinks use esc()", /esc\(p\.symbol\)/.test(appJs) && /esc\(a\.label \|\| a\.id\)/.test(appJs));
 check("role probe does NOT use a control endpoint", !appJs.includes('"/control/pause_entries", { method: "POST", body: JSON.stringify({ reason: "role-probe"'));
 
-// ---- kill flow: wrong phrase refused ----
+// ---- kill flow (v2.1): modal + arm delay, NO typing under stress ----
 await $id("kill-btn").fire("click");
 check("confirm panel opens", !$id("kill-confirm").classList.contains("hidden"));
-$id("kill-phrase").value = "kill all positions";          // wrong case
-await $id("kill-go").fire("click");
-await intervalFn?.();
-check("wrong phrase: NOT halted", $id("halt-banner").classList.contains("hidden"));
-check("wrong phrase: input cleared", $id("kill-phrase").value === "");
+check("confirm NOT armed instantly (fat-finger guard)", $id("kill-go").disabled === true);
+await $id("kill-go").fire("click");            // premature click — must be inert
+await new Promise((r) => setTimeout(r, 10));
+check("premature confirm: NOT halted", $id("halt-banner").classList.contains("hidden"));
 
-// ---- kill flow: exact phrase halts ----
-$id("kill-phrase").value = "KILL ALL POSITIONS";
+// ---- kill flow: armed confirm halts in two deliberate clicks ----
+await new Promise((r) => setTimeout(r, 750));  // arm delay elapses
+check("confirm armed after delay", $id("kill-go").disabled === false);
 $id("kill-reason").value = "ui flow drill";
 await $id("kill-go").fire("click");
 await new Promise((r) => setTimeout(r, 10));
-check("exact phrase: halt banner shown", !$id("halt-banner").classList.contains("hidden"));
+check("armed confirm: halt banner shown", !$id("halt-banner").classList.contains("hidden"));
 check("halted: unlock panel visible", !$id("unlock-panel").classList.contains("hidden"));
 check("halted: kill button disabled", $id("kill-btn").disabled === true);
 check("halted: resume button hidden", $id("resume-btn").classList.contains("hidden"));
@@ -224,6 +241,78 @@ check("history rows escape symbol/leg/reason",
       /esc\(r\.symbol\)/.test(appJs) && /esc\(r\.exit_reason/.test(appJs));
 check("broker cards escape provider/urls",
       /esc\(i\.provider/.test(appJs) && /esc\(m\.exec_service_url/.test(appJs));
+
+/* ================= cockpit v2.1: trade controls + research ================= */
+
+// ---- per-position close: button rendered, confirm armed, position gone ----
+await intervalFn?.();                          // fresh render with positions
+check("per-position CLOSE buttons rendered", closeButtons.length >= 1);
+const nBefore = (positionsBody.innerHTML.match(/<tr>/g) || []).length;
+const target = closeButtons[0].dataset.sym;
+await closeButtons[0].fire("click");
+check("close confirm opens with the RIGHT symbol",
+      !$id("close-confirm").classList.contains("hidden") &&
+      $id("close-symbol").textContent === target);
+check("close confirm NOT armed instantly", $id("close-go").disabled === true);
+await $id("close-go").fire("click");           // premature — inert
+check("premature close: confirm still open",
+      !$id("close-confirm").classList.contains("hidden"));
+await new Promise((r) => setTimeout(r, 750));
+await $id("close-go").fire("click");
+await new Promise((r) => setTimeout(r, 10));
+check("armed close: position removed from book",
+      !positionsBody.innerHTML.includes(`data-sym="${target}"`));
+check("closed trade lands in history as manual_close",
+      $id("hist-table").querySelector("tbody").innerHTML.includes("manual_close"));
+
+// ---- trade ticket: mandatory stop, arm delay, session-aware routing ----
+$id("tk-symbol").value = "ETHUSD";             // crypto: sessions never block
+$id("tk-direction").value = "buy";
+$id("tk-stop").value = "";
+await $id("tk-place").fire("click");
+check("ticket refuses a missing stop",
+      $id("tk-msg").textContent.includes("stop is mandatory"));
+$id("tk-stop").value = "1500";
+await $id("tk-place").fire("click");
+check("ticket confirm opens with summary",
+      !$id("tk-confirm").classList.contains("hidden") &&
+      $id("tk-summary").textContent.includes("ETHUSD"));
+check("ticket confirm NOT armed instantly", $id("tk-go").disabled === true);
+await new Promise((r) => setTimeout(r, 750));
+await $id("tk-go").fire("click");
+await new Promise((r) => setTimeout(r, 10));
+check("crypto ticket fills (24/7 session)",
+      $id("tk-msg").textContent.includes("✓ filled"));
+
+// india ticket at the CURRENT wall clock must mirror the session rules
+$id("tk-symbol").value = "RELIANCE";
+$id("tk-stop").value = "2400";
+await $id("tk-place").fire("click");
+await new Promise((r) => setTimeout(r, 750));
+await $id("tk-go").fire("click");
+await new Promise((r) => setTimeout(r, 10));
+check("india ticket obeys NSE session rules",
+      expectIndiaOpen ? $id("tk-msg").textContent.includes("✓ filled")
+                      : $id("tk-msg").textContent.includes("session"),
+      `msg="${$id("tk-msg").textContent}" expectOpen=${expectIndiaOpen}`);
+
+// ---- research lab ----
+check("research strategy options populated",
+      $id("rs-strategy").innerHTML.includes("tsmom"));
+check("research dataset options populated",
+      $id("rs-dataset").innerHTML.includes("india_6m"));
+$id("rs-strategy").value = "tsmom";
+$id("rs-dataset").value = "india_6m";
+await $id("rs-run").fire("click");
+await new Promise((r) => setTimeout(r, 10));
+check("research run lands in the table with CLEAN recon",
+      $id("rs-table").querySelector("tbody").innerHTML.includes("CLEAN"));
+
+// ---- kill UX source invariants ----
+check("kill flow requires no typed phrase (modal + arm)",
+      !appJs.includes('kill-phrase') && appJs.includes("armButton($(\"kill-go\"))"));
+check("gateway API still receives the confirm phrase from the UI",
+      appJs.includes('confirm: KILL_PHRASE'));
 
 console.log(`\n${PASS} passed, ${FAIL} failed`);
 process.exit(FAIL ? 1 : 0);
