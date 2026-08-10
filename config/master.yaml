@@ -33,7 +33,33 @@ risk_limits:
   mt5_min_free_margin_pct: 0.30       # post-trade free margin must stay >= 30% of equity
 
 trading_hours:
-  india: {open: "09:15", close: "15:30", timezone: "Asia/Kolkata"}
+  india:
+    open: "09:15"
+    close: "15:30"
+    timezone: "Asia/Kolkata"
+    weekdays: [0, 1, 2, 3, 4]          # Mon-Fri (MODULE 58 market clock)
+    holidays:                           # NSE 2026 weekday closures (nseindia.com/api/holiday-master)
+      - 2026-01-15   # Municipal Corporation Election (Maharashtra)
+      - 2026-01-26   # Republic Day
+      - 2026-03-03   # Holi
+      - 2026-03-26   # Shri Ram Navami
+      - 2026-03-31   # Shri Mahavir Jayanti
+      - 2026-04-03   # Good Friday
+      - 2026-04-14   # Dr. Baba Saheb Ambedkar Jayanti
+      - 2026-05-01   # Maharashtra Day
+      - 2026-05-28   # Bakri Id
+      - 2026-06-26   # Muharram
+      - 2026-09-14   # Ganesh Chaturthi
+      - 2026-10-02   # Mahatma Gandhi Jayanti
+      - 2026-10-20   # Dussehra
+      - 2026-11-10   # Diwali-Balipratipada
+      - 2026-11-24   # Prakash Gurpurb Sri Guru Nanak Dev
+      - 2026-12-25   # Christmas
+  forex:
+    week_open_dow: 0                    # Monday
+    week_open_utc: "00:00"
+    week_close_dow: 4                   # Friday
+    week_close_utc: "21:00"
   forex_sessions:
     london: ["08:00", "16:00"]
     new_york: ["13:00", "21:00"]

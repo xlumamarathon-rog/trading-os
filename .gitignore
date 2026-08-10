@@ -6,3 +6,4 @@ __pycache__/
 *.tar.gz
 /vendor/*
 !/vendor/MANIFEST.md
+config/brokers_local.yaml   # MODULE 60 deployment overlay (never committed)

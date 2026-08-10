@@ -48,6 +48,15 @@ class ControlRequest(BaseModel):
     reason: str = ""
 
 
+class BrokerSaveRequest(BaseModel):
+    """Body for /brokers/test and /brokers/save (MODULE 59). Must live at
+    module level: `from __future__ import annotations` stringifies the
+    endpoint annotations and FastAPI resolves them against module globals —
+    a function-local model silently degrades to a query param (422s)."""
+    broker: str = ""               # "india" | "mt5"
+    settings: dict = {}
+
+
 def create_gateway(
     *,
     tokens: dict[str, str],                    # token -> role ("viewer" | "operator")
@@ -62,6 +71,14 @@ def create_gateway(
     pnl_history_fn: Optional[Callable] = None,  # -> [{date, equity}] daily closes
     config_view_fn: Optional[Callable] = None,  # -> SANITIZED running config dict
     ui_dir: Optional[str] = "cockpit/web",     # M45 SPA (zero-build, static)
+    # ---- cockpit v2 (MODULE 59) — every provider optional: None keeps the
+    # endpoint alive but empty, so older assemblies work unchanged.
+    market_clock=None,                          # MODULE 58 clock -> GET /clock
+    portfolio_fn: Optional[Callable] = None,    # -> portfolio snapshot (GET /portfolio)
+    history_fn: Optional[Callable] = None,      # (filters) -> closed trades (GET /history)
+    brokers_status_fn: Optional[Callable] = None,  # -> broker cards, NO secrets
+    broker_test_fn: Optional[Callable] = None,  # (name) -> {ok, detail}
+    broker_save_fn: Optional[Callable] = None,  # (name, settings, actor) -> saved
 ) -> FastAPI:
     app = FastAPI(title="Trading OS Cockpit Gateway", docs_url=None, redoc_url=None)
 
@@ -140,11 +157,97 @@ def create_gateway(
         raw = await config_view_fn() if config_view_fn else {}
         return sanitize_config_view(raw)
 
+    # ---------- cockpit v2 read side (MODULE 59, viewer+) ----------
+
+    @app.get("/clock")
+    async def clock(actor: dict = Depends(authed)):
+        """Per-leg market session status (MODULE 58). The cockpit uses this to
+        freeze closed-market charts and badge legs OPEN/CLOSED — no more
+        india candles ticking at 21:00 IST."""
+        if market_clock is None:
+            return {"now_utc": None, "legs": {}}
+        return market_clock.status()
+
+    @app.get("/portfolio")
+    async def portfolio(actor: dict = Depends(authed)):
+        """Portfolio view: open positions w/ exit states, per-leg exposure,
+        realized + unrealized split — the operator's book at a glance."""
+        return await portfolio_fn() if portfolio_fn else {}
+
+    @app.get("/history")
+    async def history(actor: dict = Depends(authed), symbol: str = "",
+                      leg: str = "", exit_reason: str = "", since: str = "",
+                      until: str = "", limit: int = 500):
+        """Closed-trade screener (viewer+): filterable trade history. All
+        filters optional; server caps the row count."""
+        if history_fn is None:
+            return []
+        rows = await history_fn()
+        def keep(r):
+            if symbol and str(r.get("symbol", "")).upper() != symbol.upper():
+                return False
+            if leg and str(r.get("leg", "")) != leg:
+                return False
+            if exit_reason and str(r.get("exit_reason", "")) != exit_reason:
+                return False
+            d = str(r.get("date", ""))
+            if since and d and d < since:
+                return False
+            if until and d and d > until:
+                return False
+            return True
+        return [r for r in rows if keep(r)][: max(1, min(int(limit), 2000))]
+
+    @app.get("/brokers")
+    async def brokers(actor: dict = Depends(authed)):
+        """Broker connection cards: provider, reachability, which credential
+        env-vars are SET (booleans only — never values). Defensively
+        sanitized so a careless provider cannot leak a secret."""
+        raw = await brokers_status_fn() if brokers_status_fn else {}
+        return sanitize_config_view(raw)
+
     # ---------- control side (operator only, audited) ----------
 
     async def _audit(actor: dict, action: str, detail: dict) -> None:
         audit_log.append({"type": "cockpit_control", "action": action,
                           "actor_token_tail": actor["token_tail"], **detail})
+
+    @app.post("/brokers/test")
+    async def broker_test(req: BrokerSaveRequest,
+                          actor: dict = Depends(operator_only)):
+        """Ping a configured broker path (OpenAlgo base_url / MT5 exec
+        service). Never sends credentials from the request."""
+        if broker_test_fn is None:
+            raise HTTPException(status_code=501, detail="not wired")
+        result = await broker_test_fn(req.broker)
+        await _audit(actor, "broker_test", {"broker": req.broker,
+                                            "ok": bool(result.get("ok"))})
+        return result
+
+    @app.post("/brokers/save")
+    async def broker_save(req: BrokerSaveRequest,
+                          actor: dict = Depends(operator_only)):
+        """Save non-secret broker settings (provider, base_url, exec URL,
+        symbol classes) to the local overlay. The provider fn owns the
+        allowlist; the gateway additionally refuses gate-adjacent keys so
+        this endpoint STRUCTURALLY cannot weaken the live gate (spec §12)."""
+        if broker_save_fn is None:
+            raise HTTPException(status_code=501, detail="not wired")
+        forbidden = {"static_ip_confirmed", "human_ack", "sebi_checks_passed",
+                     "paper_days_completed", "clean_reconciliation_streak"}
+        bad = forbidden & set(map(str, req.settings))
+        if bad:
+            await _audit(actor, "broker_save_refused",
+                         {"broker": req.broker, "keys": sorted(bad)})
+            raise HTTPException(
+                status_code=403,
+                detail=f"gate-controlled keys refused: {sorted(bad)} — "
+                       "these are earned on the VPS, never set from the UI")
+        saved = await broker_save_fn(req.broker, req.settings,
+                                     actor["token_tail"])
+        await _audit(actor, "broker_save", {"broker": req.broker,
+                                            "keys": sorted(map(str, req.settings))})
+        return sanitize_config_view(saved)
 
     @app.post("/control/kill")
     async def kill(req: ControlRequest, actor: dict = Depends(operator_only)):

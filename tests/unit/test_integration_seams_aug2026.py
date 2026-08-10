@@ -96,6 +96,15 @@ async def _paper_runtime(tmp_path, **kw):
     async def balance():                   # async on purpose — the real contract
         return 1_000_000.0
 
+    # MODULE 58: build_runtime now default-wires the market clock from
+    # config trading_hours, so an india order routed at test time (often
+    # outside NSE hours) would be refused at the session precheck before
+    # ever reaching the layer under test. These are guard-stack seam tests,
+    # not session tests — pin the session open unless a test overrides it.
+    async def _always_open(leg):
+        return True
+
+    kw.setdefault("session_open_fn", _always_open)
     return await build_runtime(
         CFG, mode="paper", redis=_redis_with_var(), connections=_Conns(),
         kill_brokers={}, india_margin_api=None, mt5_margin_api=None,

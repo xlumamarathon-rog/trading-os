@@ -29,6 +29,7 @@ from src.exits.adapters.india_stops import IndiaStopAdapter
 from src.exits.adapters.mt5_stops import Mt5StopAdapter
 from src.exits.exit_manager import ExitManager
 from src.intel.anomaly_guard import PAUSE_ENTRIES_KEY, AnomalyGuard
+from src.ops.market_clock import MarketClock
 from src.ops.persistence import JsonlAuditLog
 
 LIVE_RAMP_DEFAULTS = {"days": 5, "max_position_pct": 0.01}
@@ -74,6 +75,7 @@ class Runtime:
     budget: object = None            # MODULE 55 ring-fenced budget (None = not configured)
     session_guard: object = None     # MODULE 48 day-P&L guard
     heat_mgr: object = None          # MODULE 46 portfolio heat cap
+    market_clock: object = None      # MODULE 58 per-leg session calendar
 
 
 async def build_runtime(cfg, *, mode: str, redis, connections, kill_brokers: dict,
@@ -118,6 +120,21 @@ async def build_runtime(cfg, *, mode: str, redis, connections, kill_brokers: dic
 
     risk = RampedRisk(cfg.risk_limits, ramp_cap_for(cfg, gate_path, mode))
 
+    # Market clock (MODULE 58) — the config has declared trading_hours since
+    # MODULE 18 and the router has carried the session_open_fn precheck since
+    # MODULE 21, but nothing ever connected them: the paper runtime entered
+    # india-leg trades at 21:00 IST with the NSE closed (operator video,
+    # 2026-08-10). Default-wire the clock here. An explicit session_open_fn
+    # argument still wins (tests/simulations override), and replay scripts
+    # assemble their own stack so certified research numbers are untouched.
+    # ENTRIES only — exits, stops and the kill switch are never clock-gated.
+    market_clock = None
+    if session_open_fn is None:
+        hours_cfg = (cfg.model_extra or {}).get("trading_hours")
+        if hours_cfg:
+            market_clock = MarketClock(hours_cfg)
+            session_open_fn = market_clock.session_open_fn
+
     # Portfolio-level guard stack (MODULES 46/48/55) — the ONE gate every NEW
     # entry must clear before sizing. Aug 6 seam hunt: the modules, the router
     # hook and the composition all existed, but the production assembly never
@@ -146,6 +163,7 @@ async def build_runtime(cfg, *, mode: str, redis, connections, kill_brokers: dic
     runtime = Runtime(mode=mode, router=router, exit_mgr=exit_mgr, guard=guard,
                       kill_switch=ks, audit=audit, redis=redis, risk=risk,
                       budget=budget, session_guard=session_guard, heat_mgr=heat_mgr,
+                      market_clock=market_clock,
                       supervisor=WorkerSupervisor(redis=redis, alert_fn=alert_fn))
 
     if mode == "live":
