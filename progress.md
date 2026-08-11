@@ -225,3 +225,24 @@ decides WHEN to knock.
   at 21:00 IST, full entry->exit->ledger lifecycle observed.
 - Tests: 468 passed / 1 skipped (+13); UI harness 73 checks (+11); replay
   JSON-identical; all sleeves-off boot verified.
+
+---
+
+## 2026-08-11 (night) — retire the cockpit-next demo app
+
+The Next.js demo cockpit is gone. It existed as a design-review variant,
+but it was what the operator ended up running as "the system" — a fake
+random-walk feed with no session awareness (the source of the phantom
+night-trading report). The real cockpit is the zero-build SPA served by
+the gateway (/ui via scripts/run_paper.py); its ?demo=1 mode remains the
+harness/design path and is honestly labeled.
+
+The one load-bearing coupling was ported, not dropped: the snapshot ⇄ UI
+field canary read cockpit-next/lib/types.ts. The contract now lives in
+cockpit/web/state_contract.json owned by the real SPA, and the canary got
+STRONGER — two-sided: SnapshotBuilder must emit every contract field AND
+app.js must consume everything not marked ui_optional. Fixing the
+consumption side surfaced a real gap: the mode badge was hardcoded PAPER;
+it now follows state.mode (a live runtime shows a red LIVE badge).
+
+README run instructions now point at run_paper.py instead of npm.

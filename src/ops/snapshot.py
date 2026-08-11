@@ -1,7 +1,10 @@
-"""Cockpit snapshot builder — the EXACT CockpitState shape the Next.js UI eats.
+"""Cockpit snapshot builder — the EXACT state shape the cockpit SPA eats.
 
-Contract-tested against cockpit-next/lib/types.ts (field-name canary), so the
-Python gateway and the TypeScript UI cannot drift apart silently.
+Contract-tested against cockpit/web/state_contract.json (field-name canary,
+two-sided since 2026-08-11: the snapshot must emit every contract field and
+app.js must consume everything not marked ui_optional), so the Python
+gateway and the UI cannot drift apart silently. The contract originally
+lived in the retired cockpit-next demo app's TypeScript types.
 """
 from __future__ import annotations
 
