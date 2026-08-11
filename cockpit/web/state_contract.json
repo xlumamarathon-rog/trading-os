@@ -1,0 +1,15 @@
+{
+  "_comment": "Gateway /state contract - field names the cockpit consumes. Extracted from the retired cockpit-next CockpitState interface (2026-08-11) when the demo app was removed; now owned by the real SPA. The live_readiness canary asserts SnapshotBuilder emits every field AND that app.js references everything not listed ui_optional.",
+  "state_fields": [
+    "equity",
+    "equityCurve",
+    "halted",
+    "mode",
+    "positions",
+    "role",
+    "var95"
+  ],
+  "ui_optional": [
+    "equityCurve"
+  ]
+}

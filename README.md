@@ -11,7 +11,7 @@
 | | |
 |---|---|
 | Python tests | **267 passed / 0 failed** (unit · chaos · integration · vendor canaries · adversarial) |
-| Next.js cockpit | build clean · smoke **12/12** incl. Playwright render (28 chart canvases, 0 console errors) |
+| Cockpit SPA (zero-build) | 73-check UI harness green · 9 pages · session-aware · served by the gateway at /ui |
 | Full-stack E2E sweep | gateway API **28/28** (RBAC · typed confirmations · audit chain · traversal) · cockpit UI flows **23/23** · live-browser verified |
 | Money-module coverage | position sizer **100%** · exit engine **98%** · order state machine 95% · router 94% |
 | Safety lint | 0 violations (broker-import allowlist · except-pass ban · AST kill-switch-first proof · after-cost-only backtests) |
@@ -30,7 +30,7 @@
 
 **Learning** — an append-only prediction ledger (features frozen at decision time; a confidently-wrong model self-demotes on Brier drift), five-cause error autopsies where noise learns nothing, non-bypassable human approval on every rule/model change, bootstrap-significance holdout validation, and probability-scale Deflated Sharpe for pattern discovery.
 
-**Operations** — WorkerSupervisor (bounded restart-on-crash, heartbeats), durable fsync'd persistence, Telegram alerting that can never break the trading path, a cockpit gateway with RBAC (viewer provably cannot control), and a full **Next.js cockpit** (candlesticks, equity curve, VaR gauge, GEX heatmap, kill-switch panel with typed confirmation, approvals inbox, live-gate progress).
+**Operations** — WorkerSupervisor (bounded restart-on-crash, heartbeats), durable fsync'd persistence, Telegram alerting that can never break the trading path, a cockpit gateway with RBAC (viewer provably cannot control), and a full **zero-build cockpit SPA** (dashboard, portfolio, P&L, history screener, session-aware markets, auto-trading sleeves, research lab, kill-switch with armed confirm, broker settings, live-gate progress).
 
 ## Proven on real market data
 
@@ -92,7 +92,7 @@ src/learning/             ledger · autopsies · holdout · DSR · walk-forward 
 src/ml/                   news-reaction model core (labels · features · abstain · fusion)
 src/ops/                  gateway · snapshot · EOD worker · persistence · alerts · reports
 src/runtime.py            build_runtime(cfg, mode) — the paper|live assembly + safe-start + ramp
-cockpit-next/             Next.js cockpit (charts + visualizers; smoke.mjs 12/12)
+cockpit/web/              zero-build cockpit SPA (9 pages, 73-check harness) — served at /ui
 mt5_service/              Windows-VPS MT5 microservice (aiomql impl, verified API)
 tests/                    267 tests: unit / integration / vendor canaries / robustness
 scripts/                  simulations · real-market replay · go_live_check · lint rules
@@ -106,7 +106,7 @@ pip install -r requirements.txt fastapi arch
 python -m pytest tests/ -q && python scripts/lint_rules.py     # 267 green expected
 python scripts/paper_simulation.py                             # 6-day drill session
 python scripts/paper_replay_real.py                            # real-market replay
-cd cockpit-next && npm install && npm run build && npm start   # cockpit at :3000 (demo data)
+python scripts/run_paper.py                                    # PAPER cockpit at :8080/ui (real engine)
 python scripts/go_live_check.py                                # your pre-flight
 ```
 

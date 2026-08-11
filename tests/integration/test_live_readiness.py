@@ -139,10 +139,16 @@ async def test_ramped_sizing_is_smaller_in_early_live(tmp_path, monkeypatch):
 
 # ---------------- snapshot ⇄ UI contract canary ----------------
 
-def test_snapshot_matches_nextjs_cockpitstate_contract(tmp_path):
-    ts_src = Path("cockpit-next/lib/types.ts").read_text()
-    block = ts_src.split("interface CockpitState")[1].split("}")[0]
-    ts_fields = set(re.findall(r"^\s*(\w+)\s*:", block, re.M))
+def test_snapshot_matches_cockpit_state_contract(tmp_path):
+    """The contract used to live in cockpit-next/lib/types.ts; when the demo
+    app was removed (2026-08-11) the field list moved to
+    cockpit/web/state_contract.json, owned by the REAL cockpit. Two-sided
+    canary now: the gateway snapshot must EMIT every contract field, and the
+    shipped SPA must CONSUME every field not explicitly marked ui_optional —
+    Python, contract, and UI cannot drift apart silently."""
+    import json as _json
+    contract = _json.loads(Path("cockpit/web/state_contract.json").read_text())
+    fields = set(contract["state_fields"])
 
     sb = SnapshotBuilder(mode="paper")
     sb.push_candle("RELIANCE", 1, 1, 2, 0.5, 1.5)
@@ -153,8 +159,14 @@ def test_snapshot_matches_nextjs_cockpitstate_contract(tmp_path):
                     workers={"tick_feed": True}, approvals=[],
                     gex={"net": 0, "regime": "dampen", "strikes": []},
                     gate_path=tmp_path / "g.json")
-    missing = ts_fields - set(snap.keys())
+    missing = fields - set(snap.keys())
     assert not missing, f"snapshot missing UI fields: {missing}"
+
+    app_js = Path("cockpit/web/app.js").read_text()
+    ui_optional = set(contract.get("ui_optional", []))
+    unread = {f for f in fields - ui_optional
+              if not re.search(rf"\b{f}\b", app_js)}
+    assert not unread, f"SPA never reads contract fields: {unread}"
 
 
 # ---------------- tick feed ----------------

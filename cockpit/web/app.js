@@ -358,6 +358,11 @@ function fmtMoney(x) {
 
 function render(s) {
   state.lastState = s;
+  // mode badge follows the RUNTIME, not a hardcoded label — a live gateway
+  // must show LIVE (red), paper shows PAPER (blue)
+  const mode = (s.mode || "paper").toLowerCase();
+  $("mode-badge").textContent = mode.toUpperCase();
+  $("mode-badge").className = "badge " + (mode === "live" ? "live" : "paper");
   $("halt-banner").classList.toggle("hidden", !s.halted);
   $("unlock-panel").classList.toggle("hidden", !s.halted || state.role !== "operator");
   $("kill-btn").disabled = state.role !== "operator" || s.halted;
