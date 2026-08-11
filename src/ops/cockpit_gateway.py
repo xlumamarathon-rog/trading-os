@@ -130,6 +130,7 @@ def create_gateway(
     place_order_fn: Optional[Callable] = None,  # (ticket dict, actor) -> dict
     research_lab=None,                          # MODULE 63 ResearchLab
     strategy_engine=None,                       # MODULE 65 StrategyEngine
+    riskmath_fn: Optional[Callable] = None,     # M66 (run_id) -> Kelly report
 ) -> FastAPI:
     app = FastAPI(title="Trading OS Cockpit Gateway", docs_url=None, redoc_url=None)
 
@@ -415,6 +416,16 @@ def create_gateway(
                      {"symbol": req.symbol, "direction": req.direction,
                       "accepted": bool(result.get("accepted"))})
         return result
+
+    @app.get("/riskmath")
+    async def riskmath(actor: dict = Depends(authed), run_id: str = ""):
+        """MODULE 66 risk-math report (viewer+): empirical Kelly, growth
+        curve and bootstrap drawdowns from a research run's trades_r
+        (run_id given) or the live closed-trade ledger (run_id empty).
+        Descriptive analytics only — changes no trading behavior."""
+        if riskmath_fn is None:
+            return {"verdict": "risk optimizer not wired"}
+        return await _maybe_await(riskmath_fn(run_id))
 
     @app.get("/strategies")
     async def strategies(actor: dict = Depends(authed)):

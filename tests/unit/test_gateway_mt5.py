@@ -159,7 +159,17 @@ async def test_gateway_serves_cockpit_ui(tmp_path):
 
 
 async def test_ui_contains_no_order_logic_markers(tmp_path):
-    """Spec §12.11 canary: the SPA renders + sends intents, never sizes/places."""
+    """Spec §12.11 canary: the SPA renders + sends intents, never sizes/places.
+
+    M66 refinement (2026-08-12): the cockpit now DISPLAYS the server-computed
+    risk report, whose payload fields are named kelly/half_kelly — displaying
+    a server result is exactly what §12.11 permits. What stays forbidden is
+    client-side COMPUTATION: sizing math (Math.log/Math.pow are the growth /
+    compounding signatures), order construction, router access. The ticket
+    posts symbol/direction/stop/qty INTENTS only; the sizer runs server-side.
+    """
     js = open("cockpit/web/app.js").read()
-    for forbidden in ("placeorder", "position_size", "kelly", "order_router"):
-        assert forbidden not in js
+    for forbidden in ("placeorder", "position_size", "order_router",
+                      "Math.log(", "Math.pow(", "optimal_f(",
+                      "kelly_fraction(", "growth_per_trade("):
+        assert forbidden not in js, forbidden

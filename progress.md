@@ -292,3 +292,39 @@ same workflow as the martin_luke/18ma evaluation):**
   culling — portfolio architecture, not signals.
 - Vince/optimal-f sizing lesson: define max loss per trade first; size
   well below optimal f. (Our half-Kelly cap + 1% risk already embodies it.)
+
+---
+
+## 2026-08-12 — MODULE 66: risk optimizer (the honest "advanced math for profit")
+
+Operator asked to "use all the advanced math to maximize profits." The
+mathematics' actual answer: profit maximization IS geometric-growth
+maximization, g(f) = E[log(1+f·R)] peaks at the Kelly fraction and then
+FALLS — risking past f* produces less growth with more violence. Built the
+module that computes this from the system's own realized trades.
+
+- **src/ops/risk_optimizer.py** — stdlib-only, deterministic: empirical
+  Kelly via golden-section on the actual R distribution (no binomial
+  approximation), Wilson CI on win rate, growth curve to 2×Kelly, seeded
+  bootstrap Monte Carlo max-drawdown distribution + ruin probability.
+  Descriptive analytics ONLY — changes no trading behavior. Refuses sizing
+  claims under 10 trades; all-win samples return "Kelly undefined", never
+  a lever-up licence; negative expectancy returns f*=0.
+- **research_replay.py** — additive `trades_r` field (per-trade Rs behind
+  the aggregates), 809a6c6-style: certified fields proven field-for-field
+  IDENTICAL on tsmom/india.
+- **Gateway /riskmath** (viewer+) fed by a lab run's trades_r or the live
+  ledger; cockpit Research page renders the report.
+- **§12.11 canary refined**: forbidden markers now target client-side
+  COMPUTATION (Math.log/pow, kelly_fraction() etc.), since the SPA now
+  legitimately DISPLAYS the server-computed kelly fields.
+
+Real numbers (tsmom, india_6m, 38 closed trades): win 57.9% (CI 42–72%),
+avg +0.20R → empirical Kelly f*=25.3%/trade. Configured risk 1% = 4% of
+Kelly. Growth/trade: 0.0020 @1% · 0.0183 @½K · 0.0240 @K · **−0.0012 @2×K**
+(the cliff). Bootstrap P95 max drawdown: 7.0% @1% vs **90.8% @Kelly with
+85.7% probability of a 50% drawdown inside 50 trades**. The 1% cap +
+half-Kelly ceiling aren't timidity — they're the right side of the curve
+given 38-trade estimation error.
+
+Tests: 479 passed / 1 skipped (+11); UI harness 76 (+3).

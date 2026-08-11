@@ -43,6 +43,7 @@ from src.ops.market_clock import MarketClock
 from src.ops.paper_server import create_paper_server
 from src.ops.quote_feed import ReplayQuoteFeed
 from src.ops.research_lab import ResearchLab
+from src.ops.risk_optimizer import report as riskmath_report
 from src.ops.strategy_engine import StrategyEngine
 from src.runtime import build_runtime
 
@@ -258,6 +259,26 @@ async def assemble(data_dir: Path):
     settings = BrokerSettings(cfg, overlay_path=ROOT / "config/brokers_local.yaml")
     lab = ResearchLab(ROOT, out_root=ROOT / "data/research_runs")
 
+    def riskmath(run_id: str = "") -> dict:
+        """M66: Kelly report from a lab run's trades_r, or the live ledger."""
+        configured = float(getattr(cfg.risk_limits, "max_risk_per_trade_pct",
+                                   0.01))
+        if run_id:
+            results = lab._run_dir(run_id) / "results.json"
+            if not results.exists():
+                return {"verdict": f"run {run_id!r} has no results yet"}
+            rs = json.loads(results.read_text()).get("trades_r")
+            if rs is None:
+                return {"verdict": "this run predates trades_r — rerun the "
+                                   "backtest to get risk math"}
+            src = f"backtest {run_id}"
+        else:
+            rs = [t["realized_r"] for t in closed]
+            src = f"live paper ledger ({len(rs)} closed)"
+        rep = riskmath_report(rs, configured_risk_pct=configured)
+        rep["source"] = src
+        return rep
+
     tokens = {}
     op = os.environ.get("COCKPIT_OPERATOR_TOKEN") or f"op-{secrets.token_hex(8)}"
     vw = os.environ.get("COCKPIT_VIEWER_TOKEN") or f"vw-{secrets.token_hex(8)}"
@@ -280,7 +301,7 @@ async def assemble(data_dir: Path):
         broker_save_fn=settings.save,
         candles_fn=lambda symbol, n: feed.candles(symbol, n),
         close_position_fn=close_position, place_order_fn=place_order,
-        research_lab=lab, strategy_engine=engine)
+        research_lab=lab, strategy_engine=engine, riskmath_fn=riskmath)
 
     # test/introspection handles (FastAPI's designed extension point)
     app.state.engine = engine

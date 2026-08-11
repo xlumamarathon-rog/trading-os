@@ -362,6 +362,19 @@ check("disable is instant (no confirm dialog)",
       $id("sl-live").textContent === "1/10");
 check("sleeve rows escape names", /esc\(s\.name\)/.test(appJs));
 
+/* ================= MODULE 66: risk math panel ================= */
+
+await new Promise((r) => setTimeout(r, 20));
+check("risk math renders empirical Kelly vs configured",
+      $id("riskmath").innerHTML.includes("Kelly") &&
+      $id("riskmath").innerHTML.includes("25.3%") &&
+      $id("riskmath").innerHTML.includes("1.0%"));
+check("risk math shows the cliff (negative growth at 2x Kelly)",
+      $id("riskmath").innerHTML.includes("-0.001202"));
+check("risk math shows drawdown contrast (7% vs 90.8% P95)",
+      $id("riskmath").innerHTML.includes("7%") &&
+      $id("riskmath").innerHTML.includes("90.8%"));
+
 // ---- kill UX source invariants ----
 check("kill flow requires no typed phrase (modal + arm)",
       !appJs.includes('kill-phrase') && appJs.includes("armButton($(\"kill-go\"))"));

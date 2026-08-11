@@ -318,6 +318,24 @@ function demoApi(path, opts) {
     s.enabled = !!body.enabled;
     return Promise.resolve({ sleeve: s.name, enabled: s.enabled });
   }
+  if (path.startsWith("/riskmath")) {
+    // real numbers from the tsmom/india_6m certified replay (38 trades)
+    return Promise.resolve({
+      source: "backtest tsmom_india_6m_demo",
+      edge: { n: 38, win_rate: 0.5789, win_rate_ci95: [0.4219, 0.7215],
+              avg_r: 0.2018, std_r: 0.9942, best_r: 4.0, worst_r: -1.0 },
+      kelly: { f_star: 0.2528 },
+      fractions: { kelly: 0.2528, half_kelly: 0.1264, quarter_kelly: 0.0632,
+                   configured: 0.01, configured_vs_kelly: 0.04 },
+      growth: { at_configured: 0.001968, at_half_kelly: 0.018254,
+                at_kelly: 0.024045, at_2x_kelly: -0.001202 },
+      mc_at_configured: { dd_p95_pct: 7.0, p_ruin_50pct_dd: 0 },
+      mc_at_kelly: { dd_p95_pct: 90.8, p_ruin_50pct_dd: 0.857 },
+      verdict: "configured risk 1.0% is 4% of empirical Kelly (25.3%) — " +
+               "conservative by design; growth headroom exists but so does " +
+               "estimation error.",
+    });
+  }
   if (path === "/research/runs") {
     return Promise.resolve({ runs: demo.researchRuns || [], options: {
       strategies: ["baseline", "tsmom", "tsmom_f", "donchian", "rsi2",
@@ -678,6 +696,32 @@ async function renderResearch() {
       <td>${esc(res.closed_trades ?? "—")}</td>
       <td class="${res.reconciliation === "CLEAN" ? "pos" : "neg"}">${esc(res.reconciliation || "—")}</td></tr>`;
   }).join("") || `<tr><td colspan="8" class="sub">no runs yet — pick a strategy and dataset above</td></tr>`;
+}
+
+async function renderRiskMath() {
+  // feed the panel from the newest DONE run that carries trades_r
+  const data = await api("/research/runs").catch(() => null);
+  const done = ((data && data.runs) || []).find(r => r.status === "done");
+  const rep = await api(`/riskmath${done ? `?run_id=${encodeURIComponent(done.id)}` : ""}`)
+    .catch(() => null);
+  if (!rep || !rep.edge) {
+    $("riskmath").innerHTML = `<div class="sub">${esc((rep && rep.verdict) ||
+      "no risk report yet — run a backtest")}</div>`;
+    return;
+  }
+  const e = rep.edge, f = rep.fractions || {}, g = rep.growth || {};
+  const mcC = rep.mc_at_configured || {}, mcK = rep.mc_at_kelly || {};
+  const row = (k, v) => `<div class="row"><span>${esc(k)}</span><span>${v}</span></div>`;
+  $("riskmath").innerHTML = [
+    row("sample", `${esc(rep.source || "")} · n=${esc(e.n)} · win ${(e.win_rate * 100).toFixed(0)}%
+        <span class="sub">(CI ${(e.win_rate_ci95[0] * 100).toFixed(0)}–${(e.win_rate_ci95[1] * 100).toFixed(0)}%)</span> · avg ${esc(e.avg_r)}R`),
+    row("empirical Kelly f*", f.kelly != null
+      ? `<b class="warn">${(f.kelly * 100).toFixed(1)}%</b> · half ${(f.half_kelly * 100).toFixed(1)}% · configured <b class="pos">${(f.configured * 100).toFixed(1)}%</b> (${(f.configured_vs_kelly * 100).toFixed(0)}% of f*)`
+      : esc(rep.kelly && rep.kelly.reason || "—")),
+    g.at_kelly != null ? row("growth/trade", `@config ${esc(g.at_configured)} · @½K ${esc(g.at_half_kelly)} · @K ${esc(g.at_kelly)} · @2K <span class="neg">${esc(g.at_2x_kelly)}</span>`) : "",
+    mcC.dd_p95_pct != null ? row("P95 max drawdown", `@config <b class="pos">${esc(mcC.dd_p95_pct)}%</b> · @Kelly <b class="neg">${esc(mcK.dd_p95_pct)}%</b> (ruin p=${esc(mcK.p_ruin_50pct_dd)})`) : "",
+    `<div class="row"><span class="sub">${esc(rep.verdict || "")}</span></div>`,
+  ].join("");
 }
 
 async function launchResearch() {
@@ -1095,9 +1139,11 @@ async function boot() {
   renderConfig();
   renderAnalysis();
   renderResearch();
+  renderRiskMath();
   renderStrategies();
   setInterval(renderStrategies, POLL_MS * 3);
   setInterval(renderResearch, POLL_MS * 8);
+  setInterval(renderRiskMath, POLL_MS * 20);
   setInterval(renderClock, POLL_MS * 5);
   setInterval(renderBlotter, POLL_MS * 4);
   setInterval(renderPnlPanels, POLL_MS * 10);

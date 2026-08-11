@@ -405,6 +405,11 @@ async def run():
         "entry_rejections": rejected,
         "reconciliation": "CLEAN" if rep.clean else "MISMATCH",
         "audit_chain_ok": audit.verify_chain(),
+        # MODULE 66 (additive, like 809a6c6's metrics): the per-trade
+        # R-multiples behind the aggregates — feeds the risk optimizer's
+        # empirical Kelly + bootstrap drawdown. Existing certified fields
+        # unchanged (proven by field-for-field comparison on tsmom/india).
+        "trades_r": [e["realized_r"] for e in exits_log],
     }
     (OUT / "results.json").write_text(json.dumps(results, indent=1))
     (OUT / "equity_curve.json").write_text(json.dumps(equity_curve))
