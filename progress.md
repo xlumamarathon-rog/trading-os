@@ -134,3 +134,94 @@
 1. Provision VPSes, `docker compose up`, wire real broker adapters (verify against vendor source per R1).
 2. Backfill bhavcopy/broker history → replay suite → gate G3 calibration.
 3. Start paper-trading clocks (G2 execution, G4 exits). 4. Build cockpit SPA. 5. M37 Stage 0 baseline then S1/S2 training. 6. SEBI registration + contract-note validation. 7. Only then: smallest live capital.
+
+---
+
+## 2026-08-10 — Cockpit v2: sessions, pages, brokers (branch feat/cockpit-v2)
+
+Operator video review found the paper runtime entering india-leg trades at
+21:00 IST (NSE closed) and a single-page UI with no broker/portfolio/PnL
+surfaces. Root cause: config trading_hours had ZERO consumers and the
+router's session_open_fn hook (M21) was never wired.
+
+- **M58 market_clock.py** — per-leg session calendar (NSE 09:15–15:30 IST
+  Mon–Fri minus 16 config-listed 2026 holidays; FX 24/5 UTC week; crypto
+  24/7). Wired as build_runtime's DEFAULT session_open_fn (explicit arg still
+  wins; replay scripts assemble their own stack — certified numbers proven
+  IDENTICAL). Entries only; exits/stops/kill never gated.
+- **M59 gateway v2** — /clock /portfolio /history (filterable screener)
+  /brokers (env-var booleans only) + operator-audited /brokers/test,
+  /brokers/save. Save path refuses gate keys at TWO layers (gateway +
+  provider allowlist): the UI structurally cannot weaken the live gate.
+- **M60 broker_settings.py** — OpenAlgo provider switch (dhan|shoonya|
+  fyers|zerodha) + MT5 exec URL to a gitignored overlay
+  (config/brokers_local.yaml). Credentials stay env-vars; values never
+  transit the gateway.
+- **M61 cockpit SPA v2** — CRM shell, 7 hash-routed pages (dashboard,
+  portfolio, pnl, history, markets, ops, settings), session-aware demo feed
+  (closed markets freeze + badge CLOSED), go-live checklist, runbook.
+- Tests: 440 passed / 1 skipped (+33); UI harness 45 checks (+22, incl.
+  independent NSE-session recomputation); gateway probe 30/30;
+  research_replay tsmom/india JSON-identical to main; go_live_check still
+  exits 1 with exactly the 3 human items.
+
+---
+
+## 2026-08-10 (later) — Cockpit v2.1: trade controls, research lab, runnable paper server
+
+Operator feedback: kill switch too slow under stress (typed phrase), no
+per-trade close, no manual ticket, no in-product backtesting — and the
+deeper find: `--mode paper` exits immediately; the repo never had a
+runnable paper process (why the operator lived in the demo app).
+
+- **ExitManager.manual_exit** — public single-position close via the real
+  exit path (cancel resting stop -> market-out; fail-loud on unknowns).
+- **M62 quote_feed.py** — credential-free feed replaying bundled REAL OHLC
+  tick-by-tick inside true bar ranges; session-aware (closed legs freeze).
+- **M63 research_lab.py** — backtests from the cockpit on the certified
+  research_replay harness; allowlisted strategy×dataset, single-flight.
+- **M64 gateway** — /candles, /control/close_position (per-symbol typed
+  confirm), /control/order (full router path), /research/run|runs; ALL
+  injected providers now sync/async-tolerant (_maybe_await — the Aug-6
+  seam class struck again, caught by the new assembly test).
+- **scripts/run_paper.py** — THE missing product entrypoint: one command
+  assembles feed + runtime + gateway + cockpit at /ui. Smoke-verified
+  live: order placed, filled, closed, audited via HTTP.
+- **Kill UX** — modal + arm-delay (two deliberate clicks, no typing);
+  friction stays on the risk-increasing side (unlock phrase untouched).
+  Gateway API contract unchanged.
+- Cockpit: per-row CLOSE with armed confirm, manual trade ticket
+  (mandatory stop, router rejections shown verbatim), Research page.
+- Tests: 455 passed / 1 skipped (+15); UI harness 62 checks (+17);
+  replay JSON-identical; go_live_check still exits 1 with 3 human items.
+
+---
+
+## 2026-08-11 — MODULE 65: auto-trading sleeves (branch feat/cockpit-v2)
+
+The signal engine now trades the paper feed autonomously — through the
+identical router door as manual tickets (kill switch, anomaly, session
+clock, guards, sizer, margin). The engine adds ZERO order logic; it only
+decides WHEN to knock.
+
+- **src/ops/strategy_engine.py** — on every completed feed bar, enabled
+  sleeves evaluate their registered signal on the same real daily series
+  the backtests certified, with the replay's own real_regime/atr14
+  reproduced verbatim. One position per symbol (ExitManager owns it until
+  exit); exact sleeve attribution for the P&L ledger; a throwing sleeve is
+  disabled + reported, never retried silently.
+- **Safe boot:** every sleeve starts DISABLED. Enabling = operator act via
+  POST /strategies/toggle with typed "ENABLE <sleeve>" (audited); disable
+  is the airbag — instant, no phrase.
+- **quote_feed** — completed_count + bars_window (wrapping real-bar
+  history in the exact signal-contract shape).
+- **Cockpit Strategies page** — sleeve table (status/entries/rejections/
+  open/closed/win-rate/realized-R/last-signal), armed enable confirm,
+  instant disable, live summary cards.
+- **Proof:** mirror test — assembly boots, tsmom enabled via endpoint, one
+  real bar closes, engine does EXACTLY what SIGNALS["tsmom"] says on that
+  data. Live smoke: 3 sleeves enabled over HTTP -> 6 auto-entries, 2 open
+  crypto positions managed by ExitManager, india entries session-refused
+  at 21:00 IST, full entry->exit->ledger lifecycle observed.
+- Tests: 468 passed / 1 skipped (+13); UI harness 73 checks (+11); replay
+  JSON-identical; all sleeves-off boot verified.

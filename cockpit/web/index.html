@@ -7,131 +7,372 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
+
+<aside class="sidebar">
   <div class="brand">TRADING<span>OS</span></div>
-  <div id="mode-badge" class="badge paper">PAPER</div>
-  <div id="halt-banner" class="halt-banner hidden">⛔ TRADING HALTED — kill switch active</div>
-  <div class="auth">
-    <input id="token" type="password" placeholder="access token" autocomplete="off">
-    <span id="role" class="role">—</span>
+  <nav class="nav">
+    <a class="nav-item" id="nav-dashboard" href="#/dashboard">◧ Dashboard</a>
+    <a class="nav-item" id="nav-portfolio" href="#/portfolio">◫ Portfolio</a>
+    <a class="nav-item" id="nav-pnl" href="#/pnl">Σ P&amp;L</a>
+    <a class="nav-item" id="nav-history" href="#/history">≡ History</a>
+    <a class="nav-item" id="nav-markets" href="#/markets">◔ Markets</a>
+    <a class="nav-item" id="nav-strategies" href="#/strategies">λ Strategies</a>
+    <a class="nav-item" id="nav-research" href="#/research">◎ Research</a>
+    <a class="nav-item" id="nav-ops" href="#/ops">⚙ Operations</a>
+    <a class="nav-item" id="nav-settings" href="#/settings">⛭ Settings</a>
+  </nav>
+  <div class="sidebar-foot">
+    <div id="conn" class="conn">connecting…</div>
+    <div class="gate-mini" id="gate-mini"></div>
   </div>
-</header>
+</aside>
 
-<main>
-  <!-- row 1: vitals -->
-  <section class="cards">
-    <div class="card"><h3>Equity</h3><div id="equity" class="big">—</div>
-      <canvas id="spark" width="220" height="46"></canvas></div>
-    <div class="card"><h3>Day P&amp;L</h3><div id="pnl" class="big">—</div>
-      <div id="costs" class="sub">costs —</div></div>
-    <div class="card"><h3>VaR 95 vs limit</h3>
-      <div class="gauge"><div id="var-fill" class="gauge-fill"></div></div>
-      <div id="var-label" class="sub">—</div></div>
-    <div class="card"><h3>Workers</h3><div id="workers" class="workers">—</div></div>
-  </section>
+<div class="shell">
+  <header>
+    <div id="mode-badge" class="badge paper">PAPER</div>
+    <div id="clock-chips" class="clock-chips"></div>
+    <div id="halt-banner" class="halt-banner hidden">⛔ TRADING HALTED — kill switch active</div>
+    <div class="auth">
+      <input id="token" type="password" placeholder="access token" autocomplete="off">
+      <span id="role" class="role">—</span>
+    </div>
+  </header>
 
-  <!-- row 2: kill switch + unlock -->
-  <section class="control-row">
-    <div class="card danger-card">
-      <h3>Emergency</h3>
-      <button id="kill-btn" class="kill" disabled>KILL SWITCH</button>
-      <div id="kill-confirm" class="hidden">
-        <p>Type <code>KILL ALL POSITIONS</code> to confirm:</p>
-        <input id="kill-phrase" autocomplete="off" placeholder="confirmation phrase">
-        <input id="kill-reason" autocomplete="off" placeholder="reason (logged)">
-        <button id="kill-go" class="kill small">CONFIRM KILL</button>
-        <button id="kill-cancel" class="ghost small">cancel</button>
+  <main>
+
+  <!-- ==================== DASHBOARD ==================== -->
+  <section class="page" id="page-dashboard">
+    <div class="cards">
+      <div class="card"><h3>Equity</h3><div id="equity" class="big">—</div>
+        <canvas id="spark" width="220" height="46"></canvas></div>
+      <div class="card"><h3>Day P&amp;L</h3><div id="pnl" class="big">—</div>
+        <div id="costs" class="sub">costs —</div></div>
+      <div class="card"><h3>VaR 95 vs limit</h3>
+        <div class="gauge"><div id="var-fill" class="gauge-fill"></div></div>
+        <div id="var-label" class="sub">—</div></div>
+      <div class="card"><h3>Markets now</h3><div id="clock-cards" class="clock-cards">—</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Open positions <span class="sub">· exit states · per-trade close</span></h3>
+        <table id="positions"><thead><tr>
+          <th>symbol</th><th>leg</th><th>qty</th><th>entry</th><th>stop</th>
+          <th>R now</th><th>state</th><th>MFE</th><th></th></tr></thead><tbody></tbody></table>
+        <div id="close-confirm" class="hidden close-confirm">
+          <p>Close <b id="close-symbol">—</b> at market? The resting stop is
+            cancelled first — the position cannot be left naked.</p>
+          <button id="close-go" class="kill" disabled>CONFIRM CLOSE</button>
+          <button id="close-cancel" class="ghost">cancel</button>
+        </div>
       </div>
-      <div id="unlock-panel" class="hidden">
-        <p>System halted. Enter unlock phrase:</p>
-        <input id="unlock-phrase" type="password" autocomplete="off">
-        <button id="unlock-go" class="ghost small">UNLOCK</button>
-      </div>
-      <button id="resume-btn" class="ghost hidden">RESUME ENTRIES</button>
-      <div id="resume-confirm" class="hidden">
-        <p>Safe-start release — the system will begin taking NEW entries:</p>
-        <button id="resume-go" class="ghost small">CONFIRM RESUME</button>
-        <button id="resume-cancel" class="ghost small">cancel</button>
-      </div>
-      <button id="pause-btn" class="ghost hidden">PAUSE ENTRIES</button>
-      <div id="pause-confirm" class="hidden">
-        <p>Stop taking NEW entries (open positions keep their stops):</p>
-        <input id="pause-reason" autocomplete="off" placeholder="reason (logged)">
-        <button id="pause-go" class="ghost small">CONFIRM PAUSE</button>
-        <button id="pause-cancel" class="ghost small">cancel</button>
+      <div class="card">
+        <h3>Alerts <span class="sub">· acknowledge to clear</span></h3>
+        <div id="events" class="events"></div>
+        <h3 class="mt">Workers</h3>
+        <div id="workers" class="workers">—</div>
       </div>
     </div>
-    <div class="card grow">
-      <h3>Approvals inbox <span class="sub">(rules &amp; model promotions — human gate)</span></h3>
-      <div id="approvals" class="list">—</div>
+
+    <div class="card">
+      <h3>Trade ticket <span class="sub">· full router path — kill switch, session
+        clock, guards, sizing, margin</span></h3>
+      <div class="filters">
+        <select id="tk-symbol"></select>
+        <select id="tk-direction">
+          <option value="buy">buy</option>
+          <option value="sell">sell</option>
+        </select>
+        <input id="tk-stop" placeholder="protective stop (required)">
+        <input id="tk-qty" placeholder="qty (blank = sizer)">
+        <button id="tk-place" class="ghost">PLACE ORDER</button>
+      </div>
+      <div id="tk-confirm" class="hidden close-confirm">
+        <p>Send <b id="tk-summary">—</b> through the live order path?</p>
+        <button id="tk-go" class="kill" disabled>CONFIRM ORDER</button>
+        <button id="tk-cancel" class="ghost">cancel</button>
+      </div>
+      <div id="tk-msg" class="sub"></div>
     </div>
   </section>
 
-  <!-- row 3: positions -->
-  <section class="card">
-    <h3>Open positions · exit states</h3>
-    <table id="positions">
-      <thead><tr><th>Symbol</th><th>Leg</th><th>Qty</th><th>Entry</th><th>Stop</th>
-        <th>R now</th><th>State</th><th>MFE</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
-
-  <!-- row 4: trade blotter -->
-  <section class="card">
-    <h3>Trade blotter <span class="sub">(closed trades · R realized · exit reason · MFE captured)</span></h3>
-    <table id="blotter">
-      <thead><tr><th>Symbol</th><th>Side</th><th>R</th><th>Exit reason</th><th>MFE cap %</th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
-
-  <!-- row 4.5: analysis (technical + fundamental) -->
-  <section class="control-row">
-    <div class="card grow">
-      <h3>Technicals <span class="sub">(MODULE 56 · MACD · Bollinger · Wilder RSI · Stochastic · ADX)</span></h3>
-      <div id="technicals" class="analysis-grid">—</div>
+  <!-- ==================== PORTFOLIO ==================== -->
+  <section class="page hidden" id="page-portfolio">
+    <div class="cards">
+      <div class="card"><h3>Open exposure</h3><div id="pf-exposure" class="big">—</div>
+        <div class="sub">entry notional, all legs</div></div>
+      <div class="card"><h3>Unrealized</h3><div id="pf-unreal" class="big">—</div>
+        <div class="sub">mark-to-market, open book</div></div>
+      <div class="card"><h3>Open risk</h3><div id="pf-risk" class="big">—</div>
+        <div class="sub">Σ |entry − stop| × qty</div></div>
+      <div class="card"><h3>Legs</h3><div id="pf-legs" class="clock-cards">—</div></div>
     </div>
-    <div class="card grow">
-      <h3>Fundamentals <span class="sub">(MODULE 57 · health score · key ratios · flags)</span></h3>
-      <div id="fundamentals" class="analysis-grid">—</div>
+    <div class="card">
+      <h3>Book by leg <span class="sub">· session-aware</span></h3>
+      <div id="pf-alloc" class="alloc"></div>
+    </div>
+    <div class="card">
+      <h3>Realized by strategy <span class="sub">· from closed trades</span></h3>
+      <div id="sleeves" class="rows">—</div>
     </div>
   </section>
 
-  <!-- row 5: P&L calendar + sleeve attribution -->
-  <section class="control-row">
-    <div class="card grow">
-      <h3>P&amp;L calendar <span class="sub">(monthly, from daily equity closes)</span></h3>
-      <table id="pnl-monthly">
-        <thead><tr><th>Month</th><th>P&amp;L</th><th>Return</th><th>End equity</th></tr></thead>
-        <tbody></tbody>
-      </table>
+  <!-- ==================== P&L ==================== -->
+  <section class="page hidden" id="page-pnl">
+    <div class="cards">
+      <div class="card"><h3>Closed trades</h3><div id="pnl-ntrades" class="big">—</div></div>
+      <div class="card"><h3>Win rate</h3><div id="pnl-winrate" class="big">—</div></div>
+      <div class="card"><h3>Avg realized R</h3><div id="pnl-avgr" class="big">—</div></div>
+      <div class="card"><h3>Total costs</h3><div id="pnl-costs" class="big">—</div></div>
     </div>
-    <div class="card grow">
-      <h3>Sleeve attribution <span class="sub">(realized R by strategy)</span></h3>
-      <div id="sleeves" class="list mono">—</div>
+    <div class="card">
+      <h3>Equity curve</h3>
+      <canvas id="equity-canvas" width="900" height="180"></canvas>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>P&amp;L calendar <span class="sub">· monthly</span></h3>
+        <table id="pnl-monthly"><thead><tr>
+          <th>month</th><th>P&amp;L</th><th>return</th><th>end equity</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card">
+        <h3>Recent closed trades <span class="sub">· blotter</span></h3>
+        <table id="blotter"><thead><tr>
+          <th>symbol</th><th>side</th><th>R</th><th>exit reason</th><th>MFE cap %</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
     </div>
   </section>
 
-  <!-- row 6: running config (read-only) -->
-  <section class="card">
-    <details>
-      <summary><b>Running config</b> <span class="sub">(sanitized, read-only — what the machine believes)</span></summary>
-      <pre id="config-view" class="mono" style="overflow-x:auto"></pre>
-    </details>
+  <!-- ==================== HISTORY (screener) ==================== -->
+  <section class="page hidden" id="page-history">
+    <div class="card">
+      <h3>Trade history <span class="sub">· operations screener</span></h3>
+      <div class="filters">
+        <input id="f-symbol" placeholder="symbol (e.g. RELIANCE)">
+        <select id="f-leg">
+          <option value="">all legs</option>
+          <option value="india">india</option>
+          <option value="mt5_forex">mt5_forex</option>
+          <option value="mt5_crypto">mt5_crypto</option>
+        </select>
+        <select id="f-reason">
+          <option value="">all exit reasons</option>
+          <option value="stop_hit">stop_hit</option>
+          <option value="trail_stop">trail_stop</option>
+          <option value="time_stop_no_progress">time_stop_no_progress</option>
+          <option value="profit_lock">profit_lock</option>
+          <option value="kill_switch">kill_switch</option>
+        </select>
+        <input id="f-since" placeholder="since YYYY-MM-DD">
+        <input id="f-until" placeholder="until YYYY-MM-DD">
+        <button id="f-apply" class="ghost">FILTER</button>
+        <button id="f-csv" class="ghost">EXPORT CSV</button>
+      </div>
+      <div id="hist-summary" class="sub"></div>
+      <table id="hist-table"><thead><tr>
+        <th>date</th><th>symbol</th><th>leg</th><th>side</th><th>R</th>
+        <th>exit reason</th><th>strategy</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
   </section>
 
-  <!-- row 7: events -->
-  <section class="card">
-    <h3>Event feed <span class="sub">(anomalies · regime shifts · audit · click ✓ to acknowledge)</span></h3>
-    <div id="events" class="list mono"></div>
+  <!-- ==================== MARKETS ==================== -->
+  <section class="page hidden" id="page-markets">
+    <div class="card">
+      <h3>Sessions <span class="sub">· the clock that gates entries</span></h3>
+      <table id="sessions-table"><thead><tr>
+        <th>leg</th><th>session</th><th>status</th><th>next change</th>
+      </tr></thead><tbody></tbody></table>
+      <div class="sub mt">India entries are refused by the engine outside NSE hours
+        (MODULE 58). Exits and stops are never gated.</div>
+    </div>
+    <div class="charts" id="charts">
+      <div class="card chart-card"><h3>RELIANCE <span id="chart-badge-RELIANCE" class="mkt-badge"></span></h3>
+        <canvas id="chart-RELIANCE" width="420" height="180"></canvas></div>
+      <div class="card chart-card"><h3>BTCUSD <span id="chart-badge-BTCUSD" class="mkt-badge"></span></h3>
+        <canvas id="chart-BTCUSD" width="420" height="180"></canvas></div>
+      <div class="card chart-card"><h3>EURUSD <span id="chart-badge-EURUSD" class="mkt-badge"></span></h3>
+        <canvas id="chart-EURUSD" width="420" height="180"></canvas></div>
+    </div>
+    <div id="chart-note" class="sub"></div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Technical read <span class="sub">· MODULE 56 · read-only</span></h3>
+        <div id="technicals"></div>
+      </div>
+      <div class="card">
+        <h3>Fundamental health <span class="sub">· MODULE 57 · read-only</span></h3>
+        <div id="fundamentals"></div>
+      </div>
+    </div>
   </section>
-</main>
 
-<footer>
-  <span id="conn" class="conn">connecting…</span>
-  <span class="sub">viewer sees state · operator controls · every control audited (spec §12.11)</span>
-</footer>
+  <!-- ==================== STRATEGIES ==================== -->
+  <section class="page hidden" id="page-strategies">
+    <div class="cards">
+      <div class="card"><h3>Sleeves live</h3><div id="sl-live" class="big">—</div>
+        <div class="sub">enabled of registered</div></div>
+      <div class="card"><h3>Auto entries</h3><div id="sl-entries" class="big">—</div>
+        <div class="sub">since boot, all sleeves</div></div>
+      <div class="card"><h3>Realized R (auto)</h3><div id="sl-realized" class="big">—</div>
+        <div class="sub">closed auto trades only</div></div>
+      <div class="card"><h3>Open (auto)</h3><div id="sl-open" class="big">—</div>
+        <div class="sub">positions owned by sleeves</div></div>
+    </div>
+    <div class="card">
+      <h3>Auto-trading sleeves <span class="sub">· every sleeve boots OFF ·
+        entries go through the same router door as your manual tickets —
+        kill switch, session clock, guards, sizing, margin</span></h3>
+      <table id="sl-table"><thead><tr>
+        <th>sleeve</th><th>status</th><th>entries</th><th>rejections</th>
+        <th>open</th><th>closed</th><th>win rate</th><th>realized R</th>
+        <th>last signal</th><th></th>
+      </tr></thead><tbody></tbody></table>
+      <div id="sl-confirm" class="hidden close-confirm">
+        <p>Enable <b id="sl-name">—</b>? It will enter trades AUTONOMOUSLY on
+          every bar close its signal fires — through the full risk stack, but
+          without asking you first. Disable is instant, any time.</p>
+        <button id="sl-go" class="kill" disabled>CONFIRM ENABLE</button>
+        <button id="sl-cancel" class="ghost">cancel</button>
+      </div>
+      <div id="sl-msg" class="sub"></div>
+    </div>
+  </section>
+
+  <!-- ==================== RESEARCH ==================== -->
+  <section class="page hidden" id="page-research">
+    <div class="card">
+      <h3>Backtest lab <span class="sub">· every run is the certified harness —
+        full stack, real costs, reconciliation-CLEAN or it fails</span></h3>
+      <div class="filters">
+        <select id="rs-strategy"></select>
+        <select id="rs-dataset"></select>
+        <button id="rs-run" class="ghost">RUN BACKTEST</button>
+      </div>
+      <div id="rs-msg" class="sub"></div>
+    </div>
+    <div class="card">
+      <h3>Runs</h3>
+      <table id="rs-table"><thead><tr>
+        <th>run</th><th>status</th><th>return</th><th>maxDD</th><th>sharpe</th>
+        <th>win rate</th><th>trades</th><th>recon</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+
+  <!-- ==================== OPERATIONS ==================== -->
+  <section class="page hidden" id="page-ops">
+    <div class="grid-2">
+      <div class="card danger-card">
+        <h3>Emergency</h3>
+        <button id="kill-btn" class="kill" disabled>KILL SWITCH</button>
+        <div id="kill-confirm" class="hidden">
+          <p>Flatten <b>every position</b>, cancel all orders, halt entries?</p>
+          <input id="kill-reason" autocomplete="off" placeholder="reason (logged)">
+          <button id="kill-go" class="kill" disabled>CONFIRM — KILL ALL POSITIONS</button>
+          <button id="kill-cancel" class="ghost">cancel</button>
+          <p class="sub">Confirm arms in a moment — two deliberate clicks, no typing.
+            Unlocking afterwards needs the operator unlock phrase.</p>
+        </div>
+        <div id="unlock-panel" class="hidden">
+          <p>Enter unlock phrase:</p>
+          <input id="unlock-phrase" type="password" autocomplete="off">
+          <button id="unlock-go" class="ghost">UNLOCK</button>
+        </div>
+        <div class="row-btns">
+          <button id="resume-btn" class="ghost hidden">RESUME ENTRIES</button>
+          <button id="pause-btn" class="ghost hidden">PAUSE ENTRIES</button>
+        </div>
+        <div id="resume-confirm" class="hidden">
+          <p>Release SAFE-START: allow NEW entries?</p>
+          <button id="resume-go" class="ghost">CONFIRM RESUME</button>
+          <button id="resume-cancel" class="ghost">cancel</button>
+        </div>
+        <div id="pause-confirm" class="hidden">
+          <input id="pause-reason" autocomplete="off" placeholder="reason (logged)">
+          <button id="pause-go" class="ghost">CONFIRM PAUSE</button>
+          <button id="pause-cancel" class="ghost">cancel</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Approvals inbox <span class="sub">· rules &amp; model promotions — human gate</span></h3>
+        <div id="approvals" class="rows"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Go-live gate <span class="sub">· earned, never toggled from here</span></h3>
+      <div id="gate-list" class="gate-list">—</div>
+      <div class="sub mt">The three human items — SEBI registration, broker static IP,
+        risk acknowledgement — are recorded on the VPS. This page only reports them.</div>
+    </div>
+  </section>
+
+  <!-- ==================== SETTINGS ==================== -->
+  <section class="page hidden" id="page-settings">
+    <div class="grid-2">
+      <div class="card">
+        <h3>India broker <span class="sub">· via OpenAlgo hub</span></h3>
+        <div id="broker-india" class="broker-card">—</div>
+        <div class="filters mt">
+          <select id="bk-provider">
+            <option value="dhan">dhan</option>
+            <option value="shoonya">shoonya</option>
+            <option value="fyers">fyers</option>
+            <option value="zerodha">zerodha</option>
+          </select>
+          <input id="bk-baseurl" placeholder="OpenAlgo base_url">
+          <button id="bk-india-test" class="ghost">TEST</button>
+          <button id="bk-india-save" class="ghost">SAVE</button>
+        </div>
+        <div id="bk-india-msg" class="sub"></div>
+        <div class="sub mt">Credentials are env-vars on the VPS
+          (<code>INDIA_BROKER_API_KEY</code>, <code>INDIA_BROKER_SECRET</code>) —
+          never entered here, never shown here. Switching broker = new keys in
+          OpenAlgo + the provider name here.</div>
+      </div>
+      <div class="card">
+        <h3>MetaTrader 5 <span class="sub">· forex + crypto legs</span></h3>
+        <div id="broker-mt5" class="broker-card">—</div>
+        <div class="filters mt">
+          <input id="bk-mt5-url" placeholder="MT5 exec service URL">
+          <button id="bk-mt5-test" class="ghost">TEST</button>
+          <button id="bk-mt5-save" class="ghost">SAVE</button>
+        </div>
+        <div id="bk-mt5-msg" class="sub"></div>
+        <div class="sub mt">MT5 runs as a terminal + bridge service
+          (<code>MT5_LOGIN</code>, <code>MT5_PASSWORD</code>, <code>MT5_SERVER</code>,
+          <code>MT5_SERVICE_TOKEN</code> env-vars on that VPS).</div>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Start trading <span class="sub">· runbook</span></h3>
+        <div class="runbook">
+          <div class="run-step"><b>1 · Paper</b><code>python -m src.app --mode paper</code>
+            starts the full stack against the paper broker — no gates, no real money.
+            Every number in this cockpit works in paper mode.</div>
+          <div class="run-step"><b>2 · Evidence</b> ≥14 paper days, 5 consecutive clean
+            reconciliations — accumulated automatically in <code>gate_state.json</code>.</div>
+          <div class="run-step"><b>3 · Human items</b> SEBI algo registration ·
+            broker static IP whitelisted · typed risk acknowledgement. All three on the VPS.</div>
+          <div class="run-step"><b>4 · Pre-flight</b><code>python scripts/go_live_check.py</code>
+            must print all-PASS.</div>
+          <div class="run-step"><b>5 · Live</b><code>python -m src.app --mode live</code>
+            boots SAFE-STARTED (entries paused) → kill-switch drill → RESUME ENTRIES
+            in Operations → first 5 days at the 1% ramp cap.</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Running config <span class="sub">· sanitized, read-only</span></h3>
+        <pre id="config-view" class="config">—</pre>
+      </div>
+    </div>
+  </section>
+
+  </main>
+</div>
 
 <script src="app.js"></script>
 </body>

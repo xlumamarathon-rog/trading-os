@@ -6,3 +6,7 @@ __pycache__/
 *.tar.gz
 /vendor/*
 !/vendor/MANIFEST.md
+# MODULE 60 deployment overlay — never committed
+config/brokers_local.yaml
+# live/paper runtime state (audit, gate, sentinel) — never committed
+data/runtime/

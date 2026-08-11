@@ -197,6 +197,23 @@ class ExitManager:
         if self.on_exit:
             await _maybe_await(self.on_exit(pos.symbol, pos.telemetry))
 
+    async def manual_exit(self, symbol: str, price: float,
+                          reason: str = "manual_close") -> dict:
+        """Operator-initiated close of ONE position (cockpit v2, Aug 2026).
+
+        The cockpit's per-position CLOSE button lands here — the same
+        cancel-stop-then-market-out path every active exit takes, so a manual
+        close can never leak a resting broker stop. Raises KeyError for an
+        unknown/already-exited symbol so the gateway can 404 instead of
+        silently succeeding (fail-loud, spec §12).
+        """
+        pos = self.positions.get(symbol)
+        if pos is None or pos.state == "EXITED":
+            raise KeyError(f"no open position for {symbol!r}")
+        await self._exit(pos, price, reason)
+        return {"symbol": symbol, "exit_price": price, "reason": reason,
+                "realized_r": pos.telemetry.realized_r}
+
     # ---------- per-bar lifecycle ----------
 
     async def on_bar(self, symbol: str, high: float, low: float, close: float,
