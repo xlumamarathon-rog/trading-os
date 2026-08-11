@@ -93,6 +93,15 @@ class ResearchRunRequest(BaseModel):
     dataset: str = ""
 
 
+class SleeveToggleRequest(BaseModel):
+    """Body for /strategies/toggle (MODULE 65). Enabling a sleeve turns on
+    autonomous entries — it requires the typed per-sleeve confirmation
+    "ENABLE <sleeve>". Disabling is risk-REDUCING and needs none."""
+    sleeve: str = ""
+    enabled: bool = False
+    confirm: str = ""
+
+
 def create_gateway(
     *,
     tokens: dict[str, str],                    # token -> role ("viewer" | "operator")
@@ -120,6 +129,7 @@ def create_gateway(
     close_position_fn: Optional[Callable] = None,   # (symbol, reason) -> dict
     place_order_fn: Optional[Callable] = None,  # (ticket dict, actor) -> dict
     research_lab=None,                          # MODULE 63 ResearchLab
+    strategy_engine=None,                       # MODULE 65 StrategyEngine
 ) -> FastAPI:
     app = FastAPI(title="Trading OS Cockpit Gateway", docs_url=None, redoc_url=None)
 
@@ -404,6 +414,37 @@ def create_gateway(
         await _audit(actor, "place_order",
                      {"symbol": req.symbol, "direction": req.direction,
                       "accepted": bool(result.get("accepted"))})
+        return result
+
+    @app.get("/strategies")
+    async def strategies(actor: dict = Depends(authed)):
+        """Per-sleeve status (viewer+): enabled, entries, rejections, open
+        positions, realized R — the live auto-trading ledger."""
+        if strategy_engine is None:
+            return {"sleeves": []}
+        return strategy_engine.status()
+
+    @app.post("/strategies/toggle")
+    async def strategies_toggle(req: SleeveToggleRequest,
+                                actor: dict = Depends(operator_only)):
+        """Enable/disable an auto-trading sleeve. ENABLING is the risk-
+        increasing direction and demands the typed per-sleeve confirmation;
+        DISABLING is the airbag and goes through instantly."""
+        if strategy_engine is None:
+            raise HTTPException(status_code=501, detail="not wired")
+        if req.enabled:
+            expected = f"ENABLE {req.sleeve}".strip()
+            if not req.sleeve or req.confirm != expected:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f'confirmation phrase required: "{expected}"')
+        try:
+            result = strategy_engine.set_enabled(req.sleeve, req.enabled,
+                                                 actor["token_tail"])
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        await _audit(actor, "sleeve_toggle",
+                     {"sleeve": req.sleeve, "enabled": req.enabled})
         return result
 
     @app.post("/research/run")

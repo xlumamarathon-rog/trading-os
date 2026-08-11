@@ -16,6 +16,7 @@
     <a class="nav-item" id="nav-pnl" href="#/pnl">Σ P&amp;L</a>
     <a class="nav-item" id="nav-history" href="#/history">≡ History</a>
     <a class="nav-item" id="nav-markets" href="#/markets">◔ Markets</a>
+    <a class="nav-item" id="nav-strategies" href="#/strategies">λ Strategies</a>
     <a class="nav-item" id="nav-research" href="#/research">◎ Research</a>
     <a class="nav-item" id="nav-ops" href="#/ops">⚙ Operations</a>
     <a class="nav-item" id="nav-settings" href="#/settings">⛭ Settings</a>
@@ -205,6 +206,38 @@
         <h3>Fundamental health <span class="sub">· MODULE 57 · read-only</span></h3>
         <div id="fundamentals"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ==================== STRATEGIES ==================== -->
+  <section class="page hidden" id="page-strategies">
+    <div class="cards">
+      <div class="card"><h3>Sleeves live</h3><div id="sl-live" class="big">—</div>
+        <div class="sub">enabled of registered</div></div>
+      <div class="card"><h3>Auto entries</h3><div id="sl-entries" class="big">—</div>
+        <div class="sub">since boot, all sleeves</div></div>
+      <div class="card"><h3>Realized R (auto)</h3><div id="sl-realized" class="big">—</div>
+        <div class="sub">closed auto trades only</div></div>
+      <div class="card"><h3>Open (auto)</h3><div id="sl-open" class="big">—</div>
+        <div class="sub">positions owned by sleeves</div></div>
+    </div>
+    <div class="card">
+      <h3>Auto-trading sleeves <span class="sub">· every sleeve boots OFF ·
+        entries go through the same router door as your manual tickets —
+        kill switch, session clock, guards, sizing, margin</span></h3>
+      <table id="sl-table"><thead><tr>
+        <th>sleeve</th><th>status</th><th>entries</th><th>rejections</th>
+        <th>open</th><th>closed</th><th>win rate</th><th>realized R</th>
+        <th>last signal</th><th></th>
+      </tr></thead><tbody></tbody></table>
+      <div id="sl-confirm" class="hidden close-confirm">
+        <p>Enable <b id="sl-name">—</b>? It will enter trades AUTONOMOUSLY on
+          every bar close its signal fires — through the full risk stack, but
+          without asking you first. Disable is instant, any time.</p>
+        <button id="sl-go" class="kill" disabled>CONFIRM ENABLE</button>
+        <button id="sl-cancel" class="ghost">cancel</button>
+      </div>
+      <div id="sl-msg" class="sub"></div>
     </div>
   </section>
 

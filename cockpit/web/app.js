@@ -51,7 +51,7 @@ const state = { token: storage.getItem("cockpit_token") || "", role: null,
  * The ui_flow_test DOM shim has no location.hash and no addEventListener —
  * both must degrade: undefined hash -> dashboard; no listener -> static page. */
 const PAGES = ["dashboard", "portfolio", "pnl", "history", "markets",
-               "research", "ops", "settings"];
+               "strategies", "research", "ops", "settings"];
 
 function currentPage() {
   const h = (typeof location !== "undefined" && typeof location.hash === "string")
@@ -293,6 +293,30 @@ function demoApi(path, opts) {
       state: "RISK_ON", mfe_r: 0.0 });
     return Promise.resolve({ accepted: true, qty: body.qty || 10,
                              avg_fill_price: entry });
+  }
+  if (path === "/strategies") {
+    if (!demo.sleeves) {
+      const names = ["accurate", "accurate_ls", "baseline", "donchian",
+                     "improved", "improved2", "improved3", "rsi2",
+                     "tsmom", "tsmom_f"];
+      demo.sleeves = names.map(n => ({ name: n, enabled: n === "tsmom_f",
+        entries: n === "tsmom_f" ? 3 : 0, rejections: n === "tsmom_f" ? 1 : 0,
+        closed: n === "tsmom_f" ? 2 : 0, wins: n === "tsmom_f" ? 1 : 0,
+        realized_r: n === "tsmom_f" ? 0.9 : 0,
+        open_positions: n === "tsmom_f" ? 1 : 0,
+        last_signal: n === "tsmom_f" ? "buy RELIANCE" : null, error: null }));
+    }
+    return Promise.resolve({ sleeves: JSON.parse(JSON.stringify(demo.sleeves)) });
+  }
+  if (path === "/strategies/toggle") {
+    const body = JSON.parse(opts.body || "{}");
+    const s = (demo.sleeves || []).find(x => x.name === body.sleeve);
+    if (!s) return Promise.reject(new Error("http_404"));
+    if (body.enabled && body.confirm !== `ENABLE ${body.sleeve}`) {
+      return Promise.reject(new Error("http_400"));
+    }
+    s.enabled = !!body.enabled;
+    return Promise.resolve({ sleeve: s.name, enabled: s.enabled });
   }
   if (path === "/research/runs") {
     return Promise.resolve({ runs: demo.researchRuns || [], options: {
@@ -550,6 +574,73 @@ async function confirmTicket() {
     $("tk-msg").textContent = `✗ refused: ${r.reason || "unknown"}`;
   }
   tick();
+}
+
+/* ---------------- auto-trading sleeves (MODULE 65) ----------------
+ * Enabling a sleeve is the risk-INCREASING direction: armed confirm +
+ * typed phrase at the API. Disabling is the airbag: instant, no dialog. */
+
+async function renderStrategies() {
+  const data = await api("/strategies").catch(() => null);
+  const sleeves = (data && data.sleeves) || [];
+  const enabled = sleeves.filter(s => s.enabled);
+  $("sl-live").textContent = `${enabled.length}/${sleeves.length}`;
+  $("sl-entries").textContent = sleeves.reduce((a, s) => a + (s.entries || 0), 0);
+  const realized = sleeves.reduce((a, s) => a + (s.realized_r || 0), 0);
+  $("sl-realized").textContent = `${realized >= 0 ? "+" : ""}${realized.toFixed(2)}R`;
+  $("sl-realized").className = "big " + (realized >= 0 ? "pos" : "neg");
+  $("sl-open").textContent = sleeves.reduce((a, s) => a + (s.open_positions || 0), 0);
+
+  const isOp = state.role === "operator";
+  $("sl-table").querySelector("tbody").innerHTML = sleeves.map(s => {
+    const wr = s.closed ? Math.round((s.wins / s.closed) * 100) + "%" : "—";
+    const status = s.error
+      ? `<span class="state RISK_ON" title="${esc(s.error)}">FAULT</span>`
+      : s.enabled ? `<span class="state TRAILING">LIVE</span>`
+                  : `<span class="state">off</span>`;
+    const btn = !isOp ? "" : s.enabled
+      ? `<button class="ghost small sl-toggle" data-sleeve="${esc(s.name)}" data-on="0">DISABLE</button>`
+      : `<button class="ghost small sl-toggle" data-sleeve="${esc(s.name)}" data-on="1">ENABLE</button>`;
+    return `<tr><td>${esc(s.name)}</td><td>${status}</td>
+      <td>${esc(s.entries ?? 0)}</td><td>${esc(s.rejections ?? 0)}</td>
+      <td>${esc(s.open_positions ?? 0)}</td><td>${esc(s.closed ?? 0)}</td>
+      <td>${wr}</td>
+      <td class="${(s.realized_r ?? 0) >= 0 ? "pos" : "neg"}">${(s.realized_r ?? 0).toFixed(2)}R</td>
+      <td class="sub">${esc(s.last_signal || "—")}</td><td>${btn}</td></tr>`;
+  }).join("") || `<tr><td colspan="10" class="sub">strategy engine not wired</td></tr>`;
+  document.querySelectorAll(".sl-toggle").forEach(btn =>
+    btn.addEventListener("click", () => sleeveToggleIntent(
+      btn.dataset.sleeve, btn.dataset.on === "1")));
+}
+
+async function sleeveToggleIntent(sleeve, enable) {
+  if (!enable) {                                   // airbag: instant
+    await api("/strategies/toggle", { method: "POST",
+      body: JSON.stringify({ sleeve, enabled: false }) }).catch(() => {});
+    $("sl-msg").textContent = `sleeve ${sleeve} disabled`;
+    renderStrategies();
+    return;
+  }
+  state.sleevePending = sleeve;
+  $("sl-name").textContent = sleeve;
+  $("sl-confirm").classList.remove("hidden");
+  armButton($("sl-go"));
+}
+
+async function confirmSleeveEnable() {
+  if ($("sl-go").disabled) return;                 // not armed — defensive
+  const sleeve = state.sleevePending;
+  if (!sleeve) return;
+  const r = await api("/strategies/toggle", { method: "POST",
+    body: JSON.stringify({ sleeve, enabled: true,
+                           confirm: `ENABLE ${sleeve}` }) })
+    .catch(e => ({ error: e.message }));
+  $("sl-confirm").classList.add("hidden");
+  state.sleevePending = null;
+  $("sl-msg").textContent = r.error
+    ? (r.error === "forbidden" ? "✗ operator token required" : `✗ ${r.error}`)
+    : `✓ ${sleeve} is LIVE — it now trades on its own signals`;
+  renderStrategies();
 }
 
 /* ---------------- research lab (v2.1) ---------------- */
@@ -934,6 +1025,12 @@ function wire() {
   $("tk-go").addEventListener("click", confirmTicket);
   $("tk-cancel").addEventListener("click", () => $("tk-confirm").classList.add("hidden"));
 
+  // auto-trading sleeves
+  $("sl-go").addEventListener("click", confirmSleeveEnable);
+  $("sl-cancel").addEventListener("click", () => {
+    $("sl-confirm").classList.add("hidden"); state.sleevePending = null;
+  });
+
   // research lab
   $("rs-run").addEventListener("click", launchResearch);
 
@@ -993,6 +1090,8 @@ async function boot() {
   renderConfig();
   renderAnalysis();
   renderResearch();
+  renderStrategies();
+  setInterval(renderStrategies, POLL_MS * 3);
   setInterval(renderResearch, POLL_MS * 8);
   setInterval(renderClock, POLL_MS * 5);
   setInterval(renderBlotter, POLL_MS * 4);

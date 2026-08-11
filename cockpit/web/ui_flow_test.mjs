@@ -48,10 +48,12 @@ const $id = (id) => els[id] ?? (els[id] = new El(id));
 
 const approveButtons = [];
 const closeButtons = [];
+const sleeveButtons = [];
 global.document = {
   getElementById: $id,
   querySelectorAll: (sel) => (sel === ".approve" ? approveButtons.splice(0)
-    : sel === ".pos-close" ? closeButtons.slice(0) : []),
+    : sel === ".pos-close" ? closeButtons.slice(0)
+    : sel === ".sl-toggle" ? sleeveButtons.slice(0) : []),
 };
 global.location = { search: "?demo=1" };
 global.window = global;
@@ -84,6 +86,22 @@ Object.defineProperty(positionsBody, "innerHTML", {
       const b = new El(`pos-close:${m[1]}`);
       b.dataset.sym = m[1];
       closeButtons.push(b);
+    }
+  },
+  get() { return this._html; },
+});
+
+// intercept sleeve table tbody to synthesize ENABLE/DISABLE buttons
+const sleeveBody = $id("sl-table").querySelector("tbody");
+Object.defineProperty(sleeveBody, "innerHTML", {
+  set(v) {
+    this._html = String(v);
+    sleeveButtons.length = 0;
+    for (const m of this._html.matchAll(/data-sleeve="([^"]+)" data-on="([^"]+)"/g)) {
+      const b = new El(`sl-toggle:${m[1]}:${m[2]}`);
+      b.dataset.sleeve = m[1];
+      b.dataset.on = m[2];
+      sleeveButtons.push(b);
     }
   },
   get() { return this._html; },
@@ -307,6 +325,42 @@ await $id("rs-run").fire("click");
 await new Promise((r) => setTimeout(r, 10));
 check("research run lands in the table with CLEAN recon",
       $id("rs-table").querySelector("tbody").innerHTML.includes("CLEAN"));
+
+/* ================= MODULE 65: auto-trading sleeves ================= */
+
+await new Promise((r) => setTimeout(r, 10));
+check("strategies table renders all 10 sleeves",
+      (sleeveBody.innerHTML.match(/<tr>/g) || []).length === 10);
+check("demo sleeve tsmom_f is LIVE with stats",
+      sleeveBody.innerHTML.includes("LIVE") &&
+      sleeveBody.innerHTML.includes("buy RELIANCE"));
+check("sleeve summary cards computed", $id("sl-live").textContent === "1/10");
+
+// enabling a sleeve: armed confirm; premature click inert
+const enableBtn = sleeveButtons.find((b) => b.dataset.on === "1");
+check("ENABLE buttons offered for off sleeves", !!enableBtn);
+await enableBtn.fire("click");
+check("sleeve confirm opens with the RIGHT name",
+      !$id("sl-confirm").classList.contains("hidden") &&
+      $id("sl-name").textContent === enableBtn.dataset.sleeve);
+check("sleeve confirm NOT armed instantly", $id("sl-go").disabled === true);
+await $id("sl-go").fire("click");                    // premature — inert
+check("premature sleeve enable: confirm still open",
+      !$id("sl-confirm").classList.contains("hidden"));
+await new Promise((r) => setTimeout(r, 750));
+await $id("sl-go").fire("click");
+await new Promise((r) => setTimeout(r, 10));
+check("armed enable: sleeve goes LIVE", $id("sl-live").textContent === "2/10");
+check("enable confirms to operator", $id("sl-msg").textContent.includes("LIVE"));
+
+// disabling is the airbag: instant, no dialog
+const disableBtn = sleeveButtons.find((b) => b.dataset.on === "0");
+await disableBtn.fire("click");
+await new Promise((r) => setTimeout(r, 10));
+check("disable is instant (no confirm dialog)",
+      $id("sl-confirm").classList.contains("hidden") &&
+      $id("sl-live").textContent === "1/10");
+check("sleeve rows escape names", /esc\(s\.name\)/.test(appJs));
 
 // ---- kill UX source invariants ----
 check("kill flow requires no typed phrase (modal + arm)",

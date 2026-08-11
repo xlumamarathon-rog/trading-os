@@ -43,6 +43,7 @@ from src.ops.market_clock import MarketClock
 from src.ops.paper_server import create_paper_server
 from src.ops.quote_feed import ReplayQuoteFeed
 from src.ops.research_lab import ResearchLab
+from src.ops.strategy_engine import StrategyEngine
 from src.runtime import build_runtime
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -138,7 +139,13 @@ async def assemble(data_dir: Path):
         events.insert(0, {"t": dt.datetime.now().strftime("%H:%M:%S"), "m": msg})
         del events[40:]
 
+    # MODULE 65 — auto-trading sleeves. Every sleeve boots DISABLED; the
+    # operator enables them from the cockpit Strategies page (audited).
+    engine = StrategyEngine(router=runtime.router, exit_mgr=runtime.exit_mgr,
+                            feed=feed, universe=uni, note_fn=note)
+
     async def on_exit_cb(sym, telemetry):
+        sleeve = engine.sleeve_for(sym) or "manual"
         closed.insert(0, {
             "date": dt.date.today().isoformat(), "symbol": sym,
             "leg": uni.get(sym, {}).get("leg", ""),
@@ -147,7 +154,8 @@ async def assemble(data_dir: Path):
             "realized_r": round(telemetry.realized_r, 2),
             "reason": telemetry.exit_reason, "exit_reason": telemetry.exit_reason,
             "mfe_captured_pct": round(telemetry.mfe_captured_pct, 1),
-            "sleeve": "manual"})
+            "sleeve": sleeve})
+        engine.record_exit(sym, telemetry.realized_r)
         note(f"exit {sym}: {telemetry.exit_reason} "
              f"({telemetry.realized_r:+.2f}R)")
     runtime.exit_mgr.on_exit = on_exit_cb
@@ -169,6 +177,9 @@ async def assemble(data_dir: Path):
                         await runtime.exit_mgr.on_bar(
                             sym, high=k[-1]["h"], low=k[-1]["l"],
                             close=k[-1]["c"], regime={})
+            # MODULE 65: enabled sleeves evaluate on completed bars — same
+            # router door as manual tickets, nothing fires while disabled
+            await engine.on_tick()
             await asyncio.sleep(FEED_INTERVAL_S)
 
     # ---------------- gateway providers ----------------
@@ -199,7 +210,9 @@ async def assemble(data_dir: Path):
                 "var95": float(var_raw or 0.0),
                 "positions": rows, "events": list(events),
                 "workers": {"quote_feed": True, "exit_manager": True,
-                            "order_router": True, "kill_switch": True},
+                            "order_router": True, "kill_switch": True,
+                            "strategy_engine": any(
+                                s["enabled"] for s in engine.sleeves.values())},
                 "gate": gate,
                 "feed": feed.status()}
 
@@ -267,7 +280,13 @@ async def assemble(data_dir: Path):
         broker_save_fn=settings.save,
         candles_fn=lambda symbol, n: feed.candles(symbol, n),
         close_position_fn=close_position, place_order_fn=place_order,
-        research_lab=lab)
+        research_lab=lab, strategy_engine=engine)
+
+    # test/introspection handles (FastAPI's designed extension point)
+    app.state.engine = engine
+    app.state.feed = feed
+    app.state.runtime = runtime
+    app.state.broker = broker
 
     return app, feed_loop, (op, vw)
 

@@ -194,3 +194,34 @@ runnable paper process (why the operator lived in the demo app).
   (mandatory stop, router rejections shown verbatim), Research page.
 - Tests: 455 passed / 1 skipped (+15); UI harness 62 checks (+17);
   replay JSON-identical; go_live_check still exits 1 with 3 human items.
+
+---
+
+## 2026-08-11 — MODULE 65: auto-trading sleeves (branch feat/cockpit-v2)
+
+The signal engine now trades the paper feed autonomously — through the
+identical router door as manual tickets (kill switch, anomaly, session
+clock, guards, sizer, margin). The engine adds ZERO order logic; it only
+decides WHEN to knock.
+
+- **src/ops/strategy_engine.py** — on every completed feed bar, enabled
+  sleeves evaluate their registered signal on the same real daily series
+  the backtests certified, with the replay's own real_regime/atr14
+  reproduced verbatim. One position per symbol (ExitManager owns it until
+  exit); exact sleeve attribution for the P&L ledger; a throwing sleeve is
+  disabled + reported, never retried silently.
+- **Safe boot:** every sleeve starts DISABLED. Enabling = operator act via
+  POST /strategies/toggle with typed "ENABLE <sleeve>" (audited); disable
+  is the airbag — instant, no phrase.
+- **quote_feed** — completed_count + bars_window (wrapping real-bar
+  history in the exact signal-contract shape).
+- **Cockpit Strategies page** — sleeve table (status/entries/rejections/
+  open/closed/win-rate/realized-R/last-signal), armed enable confirm,
+  instant disable, live summary cards.
+- **Proof:** mirror test — assembly boots, tsmom enabled via endpoint, one
+  real bar closes, engine does EXACTLY what SIGNALS["tsmom"] says on that
+  data. Live smoke: 3 sleeves enabled over HTTP -> 6 auto-entries, 2 open
+  crypto positions managed by ExitManager, india entries session-refused
+  at 21:00 IST, full entry->exit->ledger lifecycle observed.
+- Tests: 468 passed / 1 skipped (+13); UI harness 73 checks (+11); replay
+  JSON-identical; all sleeves-off boot verified.

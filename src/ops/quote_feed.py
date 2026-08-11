@@ -47,6 +47,7 @@ class ReplayQuoteFeed:
         self._last: dict[str, float] = {}
         self._candles: dict[str, deque] = {}
         self._tick_n: dict[str, int] = {}
+        self._completed: dict[str, int] = {}
         for sym, (ddir, fname) in data_dirs.items():
             path = Path(ddir) / fname
             rows = json.loads(path.read_text())
@@ -58,6 +59,7 @@ class ReplayQuoteFeed:
             self._cursor[sym] = 0
             self._candles[sym] = deque(maxlen=history)
             self._tick_n[sym] = 0
+            self._completed[sym] = 0
             self._last[sym] = float(self._bars[sym][0]["open"])
 
     # ---------------- tick synthesis ----------------
@@ -78,6 +80,7 @@ class ReplayQuoteFeed:
         step = self._tick_n[sym] % len(path)
         if step == len(path) - 1:                     # bar exhausted -> next bar
             self._cursor[sym] = (i + 1) % len(bars)
+            self._completed[sym] += 1                 # MODULE 65 bar-close hook
         self._tick_n[sym] += 1
         w = path[step]
         mid = (h + l) / 2.0
@@ -123,8 +126,24 @@ class ReplayQuoteFeed:
             return None
         return sum(k["h"] - k["l"] for k in cs) / len(cs) or None
 
+    def completed_count(self, symbol: str) -> int:
+        """Bar completions since boot — the strategy engine's clock edge."""
+        return self._completed.get(symbol, 0)
+
+    def bars_window(self, symbol: str, n: int = 200) -> list:
+        """The last n REAL file bars ending at the current cursor (wrapping),
+        in the exact shape the signal contract expects (bars[:i] history).
+        This is the same daily series the strategies were certified on."""
+        bars = self._bars.get(symbol)
+        if not bars:
+            return []
+        i = self._cursor[symbol]
+        n = min(n, len(bars))
+        return [bars[(i - n + k) % len(bars)] for k in range(n)]
+
     def status(self) -> dict:
         return {"kind": "replay_real_history",
                 "symbols": {s: {"bars": len(b), "cursor": self._cursor[s],
+                                "completed": self._completed[s],
                                 "last": self._last.get(s)}
                             for s, b in self._bars.items()}}
