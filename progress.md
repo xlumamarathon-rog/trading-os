@@ -246,3 +246,49 @@ consumption side surfaced a real gap: the mode badge was hardcoded PAPER;
 it now follows state.mode (a live runtime shows a red LIVE badge).
 
 README run instructions now point at run_paper.py instead of npm.
+
+---
+
+## 2026-08-12 — evaluated FinceptTerminal + WCC "top trader" strategies (no code ingested)
+
+**FinceptTerminal (Fincept-Corporation, 22.6k stars) — evaluated, NOT adopted.**
+Cloned to vendor/ (temporarily) and dissected. Verdict mirrors the OpenBB
+decision, for stronger reasons:
+1. AGPL-3.0 (network copyleft — the exact license this repo rejected for
+   OpenBB). Code copying is off the table.
+2. Its 407 "strategies" are QuantConnect LEAN's example/regression
+   algorithms RELABELED with Fincept MIT+copyright headers inside an AGPL
+   repo — three-layer license mess, and zero proprietary alpha.
+3. Its "37 AI agents" are LLM persona prompts (Buffett/Graham/…/a
+   RenTech cosplay). Opinion intel, not codifiable strategy; we already
+   vendor the better originals (TradingAgents, ai-berkshire) with adapters.
+4. Its india broker layer IMPORTS OPENALGO'S ADAPTERS — the same hub this
+   repo already standardized on; crypto is a ccxt wrapper; "quant lab" is
+   Microsoft Qlib wrappers. Nothing to gain that we don't have.
+Useful as: independent confirmation that OpenAlgo-as-hub is the right india
+broker architecture. Clone deleted; not added to clone_vendors.sh.
+
+**WCC 2026 leaderboard "top traders" — researched, nothing ingestible.**
+The viral board (Rosputnia 428.8%→604% YTD, Pham, Pomer, Cianni, Perdices)
+is an interim, unaudited, best-of-multiple-accounts ranking on $10k
+minimum accounts with no drawdown reported; the entry agreement lets
+competitors run several accounts and rank only the best — contractual
+survivorship. Of the five, only Rosputnia has a public identity, and her
+"method" is indicator names without definitions. Verdict: zero codifiable
+rules from the 2026 leaders. "Comment TRADE" reels reposting the board are
+lead-capture funnels.
+
+**What IS codifiable from WCC history (future research-branch candidates,
+same workflow as the martin_luke/18ma evaluation):**
+- Larry Williams volatility breakout: entry at Open ± k·(prev range),
+  k ≈ 0.75–1.1 published; parameters must survive out-of-sample.
+- Williams "Oops!": open gaps below prior low → buy stop at prior low
+  (mirror short). Radge's replication: UNfiltered variant survived 17y
+  out-of-sample; the book's day-filters did not — validate base rules only.
+- Williams Greatest Swing Value: fully specified (BuySwing/SellSwing SZMA).
+- Williams "bailout" exit: first profitable open.
+- Unger's meta-layer (4× champion, published as process): many small
+  uncorrelated systems, monthly performance-ranked rotation, Monte Carlo
+  culling — portfolio architecture, not signals.
+- Vince/optimal-f sizing lesson: define max loss per trade first; size
+  well below optimal f. (Our half-Kelly cap + 1% risk already embodies it.)
