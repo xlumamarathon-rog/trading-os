@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import inspect
 import json
 import os
 import secrets
@@ -41,6 +42,7 @@ from src.ops.broker_settings import BrokerSettings
 from src.ops.cockpit_gateway import create_gateway
 from src.ops.market_clock import MarketClock
 from src.ops.paper_server import create_paper_server
+from src.ops.live_feeds import FeedMux, Mt5QuoteFeed, YahooQuoteFeed
 from src.ops.quote_feed import ReplayQuoteFeed
 from src.ops.research_lab import ResearchLab
 from src.ops.risk_optimizer import report as riskmath_report
@@ -102,13 +104,44 @@ def r_now(pos, px: float) -> float:
     return sign * (px - pos.entry) / risk
 
 
+def make_feed(mode: str, uni: dict, clock, cfg):
+    """FEED=replay|yahoo|mt5 (MODULE 67). Every live mode carries a replay
+    fallback over the same symbols — a dead provider degrades to replayed
+    real history, loudly, instead of freezing the cockpit."""
+    legs = {s: m["leg"] for s, m in uni.items()}
+
+    def replay_for(symbols):
+        return ReplayQuoteFeed(
+            {s: (uni[s]["dir"], uni[s]["file"]) for s in symbols},
+            market_clock=clock, symbol_legs={s: legs[s] for s in symbols})
+
+    if mode == "yahoo":
+        syms = list(uni)
+        return YahooQuoteFeed(syms, market_clock=clock, symbol_legs=legs,
+                              fallback=replay_for(syms))
+    if mode == "mt5":
+        # feed doctrine: mt5 legs on the broker's own bridge feed,
+        # india on Yahoo (until the OpenAlgo websocket lands)
+        mt5_syms = [s for s, m in uni.items() if m["leg"] != "india"]
+        in_syms = [s for s, m in uni.items() if m["leg"] == "india"]
+        mt5_cfg = (cfg.model_extra or {}).get("broker", {}).get("mt5", {})
+        mt5_feed = Mt5QuoteFeed(
+            mt5_syms, base_url=mt5_cfg.get("exec_service_url", ""),
+            token=os.environ.get("MT5_SERVICE_TOKEN", ""),
+            market_clock=clock, symbol_legs={s: legs[s] for s in mt5_syms},
+            fallback=replay_for(mt5_syms))
+        yh_feed = YahooQuoteFeed(
+            in_syms, market_clock=clock, symbol_legs={s: legs[s] for s in in_syms},
+            fallback=replay_for(in_syms))
+        return FeedMux({mt5_feed: mt5_syms, yh_feed: in_syms})
+    return replay_for(list(uni))
+
+
 async def assemble(data_dir: Path):
     cfg = load_config(str(ROOT / "config/master.yaml"))
     uni = load_universe()
     clock = MarketClock((cfg.model_extra or {}).get("trading_hours"))
-    feed = ReplayQuoteFeed(
-        {s: (m["dir"], m["file"]) for s, m in uni.items()},
-        market_clock=clock, symbol_legs={s: m["leg"] for s, m in uni.items()})
+    feed = make_feed(os.environ.get("FEED", "replay").lower(), uni, clock, cfg)
 
     broker = PaperBroker(
         costs=cfg.execution_costs.india, impact=cfg.execution_costs.impact_model,
@@ -169,7 +202,10 @@ async def assemble(data_dir: Path):
             today = dt.date.today().isoformat()
             if day_start["date"] != today:
                 day_start.update(date=today, equity=broker.equity())
-            for sym, px in feed.tick_once(now).items():
+            ticks = feed.tick_once(now)
+            if inspect.isawaitable(ticks):
+                ticks = await ticks
+            for sym, px in (ticks or {}).items():
                 broker.on_tick(sym, px)
                 pos = runtime.exit_mgr.positions.get(sym)
                 if pos is not None and pos.state != "EXITED":
@@ -328,7 +364,7 @@ def main() -> int:
         print(f"  UI        http://127.0.0.1:{os.environ.get('PORT', 8080)}/ui")
         print(f"  operator  {op}")
         print(f"  viewer    {vw}")
-        print("  feed      replay of real bundled OHLC (session-aware)")
+        print(f"  feed      {os.environ.get('FEED', 'replay')} (session-aware, fail-soft)")
         print("=" * 64)
         asyncio.get_event_loop().create_task(feed_loop())
         server = uvicorn.Server(uvicorn.Config(

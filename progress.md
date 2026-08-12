@@ -389,3 +389,33 @@ GET /candles/{symbol}?timeframe=&count= — same X-MT5-Auth posture as exec
 endpoints, 503 fail-loud when the terminal is down, count capped at 1000.
 aiomql impl verified against vendor source (core/meta_trader.py) per R1.
 Tests: 481 passed / 1 skipped (+2).
+
+---
+
+## 2026-08-12 — MODULE 67: live quote feeds (FEED=yahoo|mt5|replay)
+
+The paper cockpit now runs on REAL live prices. Two providers behind the
+exact M62 interface (run_paper and the strategy engine cannot tell the
+difference), selected by the FEED env var:
+
+- **YahooQuoteFeed** — the ledger-verified chart endpoint. Budgeted
+  round-robin (one HTTP call per min_gap_s, default 8s), OPEN symbols
+  only; daily history (250 bars/symbol) fetched at boot so strategies
+  have their full lookback; live ticks aggregate into 5m candles.
+- **Mt5QuoteFeed** — the bridge's /tick and /candles; mids the broker's
+  REAL bid/ask; X-MT5-Auth on every call; D1 bars from the terminal.
+- **FeedMux** — per-leg doctrine composition: FEED=mt5 routes mt5 legs to
+  the bridge and india to Yahoo.
+- **Fail-soft contract**: provider errors strike; max_errors degrades the
+  feed to its ReplayQuoteFeed fallback (status says DEGRADED_replay), and
+  a healed provider un-degrades via periodic probe. A dead vendor can
+  never freeze the cockpit.
+- Session-aware at the feed: closed legs are never even POLLED (budget +
+  correctness in one move).
+
+Tests: recorded-fixture only (real Yahoo payloads captured live
+2026-08-12 in-session; MT5 fixtures matching the shipped bridge schema)
+via httpx.MockTransport — no network in tests. 488 passed / 1 skipped
+(+7). Live smoke during NSE session: cockpit RELIANCE 1311.6 vs 1311.8
+direct query seconds apart; TCS 2327.9; HDFCBANK 722.65; 250 daily bars
+per symbol; /candles aggregating.
