@@ -190,11 +190,87 @@ def sig_accurate_ls(bars, i, regime):
     return None
 
 
+# ---------------------------------------------------------------------------
+# WCC-lineage research candidates (research/wcc-williams-aug2026, 2026-08-12).
+# Sources: Larry Williams' PUBLISHED rules (ledger 2026-08-12 research entry).
+# HONEST DEVIATION NOTE: Williams' originals are intraday STOP-ENTRY systems
+# (buy stop at Open_t + offset, filled mid-bar). This engine's certified
+# contract enters at bars[i]["open"] using bars[:i] only — so each candidate
+# is the close-confirmation daily-bar ADAPTATION: it enters at TODAY's open
+# when YESTERDAY's close proves the published trigger fired and held. Exits
+# are the standard certified ExitManager (chandelier/breakeven/partials),
+# NOT Williams' first-profitable-open bailout — the question under test is
+# whether these ENTRY rules add edge inside OUR system, apples-to-apples
+# with the other ten sleeves. UNFILTERED base rules only (Radge 2015: the
+# base rules survived 17y out-of-sample; the book's day-filters did not).
+
+
+def sig_vbo(bars, i, regime):
+    """Volatility breakout (The Definitive Guide to Futures Trading):
+    published trigger Open_t ± k·Range_{t-1}, k published 0.9–1.1 → k=1.0.
+    Adaptation: yesterday closed beyond ITS open ± k·(range of the day
+    before) → enter at today's open in that direction."""
+    if i < 3:
+        return None
+    k = 1.0
+    y, p = bars[i - 1], bars[i - 2]
+    rng = p["high"] - p["low"]
+    if rng <= 0:
+        return None
+    if y["close"] > y["open"] + k * rng:
+        return "buy"
+    if y["close"] < y["open"] - k * rng:
+        return "sell"
+    return None
+
+
+def sig_oops(bars, i, regime):
+    """Oops! gap reversal (Long-Term Secrets ch.7 p.113): open gaps below
+    the prior day's low → buy stop AT the prior low (mirror for gap-up).
+    Adaptation: yesterday gapped open beyond the prior day's extreme and
+    closed back through it (the published stop would have filled and
+    finished onside) → enter at today's open with the reversal."""
+    if i < 3:
+        return None
+    y, p = bars[i - 1], bars[i - 2]
+    if y["open"] < p["low"] and y["close"] > p["low"]:
+        return "buy"
+    if y["open"] > p["high"] and y["close"] < p["high"]:
+        return "sell"
+    return None
+
+
+def sig_gsv(bars, i, regime):
+    """Greatest Swing Value (Long-Term Secrets ch.8, fully specified):
+    BuySwing_t = H−O on down closes, SellSwing_t = O−L on up closes;
+    trigger at Open + v·SZMA(swing, n) (SZMA = mean skipping zeros).
+    Inputs n=4, v=1.8 (the commonly published Sierra defaults — Williams
+    left them free). Adaptation: yesterday closed beyond its open +
+    v·SZMA computed STRICTLY on the n bars before yesterday."""
+    n, v = 4, 1.8
+    if i < n + 3:
+        return None
+    window = bars[i - 1 - n:i - 1]
+    y = bars[i - 1]
+    buy_swings = [b["high"] - b["open"] for b in window if b["close"] < b["open"]]
+    sell_swings = [b["open"] - b["low"] for b in window if b["close"] > b["open"]]
+    if buy_swings:
+        gsv_b = sum(buy_swings) / len(buy_swings)
+        if gsv_b > 0 and y["close"] > y["open"] + v * gsv_b:
+            return "buy"
+    if sell_swings:
+        gsv_s = sum(sell_swings) / len(sell_swings)
+        if gsv_s > 0 and y["close"] < y["open"] - v * gsv_s:
+            return "sell"
+    return None
+
+
 SIGNALS: dict[str, Callable] = {
     "baseline": sig_baseline, "tsmom": sig_tsmom, "tsmom_f": sig_tsmom_f,
     "donchian": sig_donchian, "rsi2": sig_rsi2, "improved": sig_improved,
     "improved2": sig_improved2, "improved3": sig_improved3,
     "accurate": sig_accurate, "accurate_ls": sig_accurate_ls,
+    "vbo": sig_vbo, "oops": sig_oops, "gsv": sig_gsv,
 }
 
 

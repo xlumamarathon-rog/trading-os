@@ -297,8 +297,8 @@ function demoApi(path, opts) {
   if (path === "/strategies") {
     if (!demo.sleeves) {
       const names = ["accurate", "accurate_ls", "baseline", "donchian",
-                     "improved", "improved2", "improved3", "rsi2",
-                     "tsmom", "tsmom_f"];
+                     "gsv", "improved", "improved2", "improved3", "oops",
+                     "rsi2", "tsmom", "tsmom_f", "vbo"];
       demo.sleeves = names.map(n => ({ name: n, enabled: n === "tsmom_f",
         entries: n === "tsmom_f" ? 3 : 0, rejections: n === "tsmom_f" ? 1 : 0,
         closed: n === "tsmom_f" ? 2 : 0, wins: n === "tsmom_f" ? 1 : 0,

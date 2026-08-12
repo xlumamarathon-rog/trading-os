@@ -329,12 +329,12 @@ check("research run lands in the table with CLEAN recon",
 /* ================= MODULE 65: auto-trading sleeves ================= */
 
 await new Promise((r) => setTimeout(r, 10));
-check("strategies table renders all 10 sleeves",
-      (sleeveBody.innerHTML.match(/<tr>/g) || []).length === 10);
+check("strategies table renders all 13 sleeves",
+      (sleeveBody.innerHTML.match(/<tr>/g) || []).length === 13);
 check("demo sleeve tsmom_f is LIVE with stats",
       sleeveBody.innerHTML.includes("LIVE") &&
       sleeveBody.innerHTML.includes("buy RELIANCE"));
-check("sleeve summary cards computed", $id("sl-live").textContent === "1/10");
+check("sleeve summary cards computed", $id("sl-live").textContent === "1/13");
 
 // enabling a sleeve: armed confirm; premature click inert
 const enableBtn = sleeveButtons.find((b) => b.dataset.on === "1");
@@ -350,7 +350,7 @@ check("premature sleeve enable: confirm still open",
 await new Promise((r) => setTimeout(r, 750));
 await $id("sl-go").fire("click");
 await new Promise((r) => setTimeout(r, 10));
-check("armed enable: sleeve goes LIVE", $id("sl-live").textContent === "2/10");
+check("armed enable: sleeve goes LIVE", $id("sl-live").textContent === "2/13");
 check("enable confirms to operator", $id("sl-msg").textContent.includes("LIVE"));
 
 // disabling is the airbag: instant, no dialog
@@ -359,7 +359,7 @@ await disableBtn.fire("click");
 await new Promise((r) => setTimeout(r, 10));
 check("disable is instant (no confirm dialog)",
       $id("sl-confirm").classList.contains("hidden") &&
-      $id("sl-live").textContent === "1/10");
+      $id("sl-live").textContent === "1/13");
 check("sleeve rows escape names", /esc\(s\.name\)/.test(appJs));
 
 /* ================= MODULE 66: risk math panel ================= */
