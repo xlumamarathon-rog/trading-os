@@ -328,3 +328,38 @@ half-Kelly ceiling aren't timidity — they're the right side of the curve
 given 38-trade estimation error.
 
 Tests: 479 passed / 1 skipped (+11); UI harness 76 (+3).
+
+---
+
+## 2026-08-12 — data-source verification: Yahoo chart API is the unified feed (measured live)
+
+Operator asked for a TradingView-like single source for india + forex.
+Verified empirically from a live NSE session (Wed 10:44 IST), not from
+documentation:
+
+- **query1.finance.yahoo.com/v8/finance/chart/** — the SAME endpoint
+  scripts/fetch_market_data.py already uses for the bundled datasets —
+  serves NSE equities (RELIANCE.NS 1,314.10), NIFTY (^NSEI), forex
+  (EURUSD=X, USDINR=X), crypto (BTC-USD) and COMEX (GC=F) from one URL
+  shape, no credentials, ~50ms.
+- **Measured quote age during the live session: NSE 1–2s** (effectively
+  real-time, not the assumed 15-min delay), USDINR 4s, crypto 4s, EUR/GBP
+  ~42s, COMEX ~10min.
+- Granularity/history (measured): 1m×7d, 5m×60d, 1h×730d; daily history
+  deep (RELIANCE first-trade metadata 1996; chunked period1/period2
+  fetching for full depth).
+- Caveats (honest): unofficial API — no SLA, no published rate limits
+  (community consensus: keep well under a few hundred req/hr/IP), ToS-grey
+  for anything beyond personal use. Any live wiring must be fail-soft to
+  the replay feed.
+- Alternatives checked: Binance public API geo-blocked from the test DC
+  (fine from India); nseindia.com/api bot-blocked (404) from DCs;
+  TradingView has NO public data API (its chart library requires bringing
+  your own feed; scraping libs violate ToS). Paid unified (TwelveData Pro
+  etc.) only worth it at production scale — at which point the broker
+  websockets (OpenAlgo + MT5) are better AND contractual.
+
+Conclusion: Yahoo chart API = the credential-free unified source for the
+paper cockpit's live feed (same pedigree as the bundled data); broker
+feeds remain the production path. Feed interface (M62) already designed
+for the swap.
