@@ -419,3 +419,39 @@ via httpx.MockTransport — no network in tests. 488 passed / 1 skipped
 (+7). Live smoke during NSE session: cockpit RELIANCE 1311.6 vs 1311.8
 direct query seconds apart; TCS 2327.9; HDFCBANK 722.65; 250 daily bars
 per symbol; /candles aggregating.
+
+---
+
+## 2026-08-12 — WCC-lineage research: vbo / oops / gsv (branch research/wcc-williams-aug2026)
+
+Implemented Larry Williams' three PUBLISHED rules as contract-compatible
+daily-bar adaptations (close-confirmation entries at next open; certified
+ExitManager exits, NOT the bailout — the question tested: do these ENTRY
+rules add edge inside OUR system). Unfiltered base rules only (Radge).
+Promotion bar PRE-REGISTERED before results: CLEAN everywhere, ≥10 pooled
+trades, positive primary-market return sum, empirical Kelly > 0, no
+stress blowup.
+
+18-run evidence grid (india/forex/crypto 6m + covid/gfc/flash), all 18
+reconciled CLEAN, tsmom certified results re-proven IDENTICAL with the
+new registry entries present:
+
+| candidate | pooled n | win | avgR | Kelly f* | primary ret Σ | stress (covid/gfc/flash) |
+|---|---|---|---|---|---|---|
+| vbo  | 156 | 44.9% | 0.100 | 12.5% | +0.86% | −0.85 / −0.90 / +0.28 |
+| oops |  67 | 43.3% | 0.173 | 20.3% | +1.61% | −0.64 / −0.18 / +0.53 |
+| gsv  | 211 | 38.4% | 0.018 |  2.0% | +2.14% | −1.26 / −2.97 / −0.31 |
+
+All three cleared the pre-registered bar → registered (sleeves boot
+DISABLED; registry admission ≠ activation). Honest recommendation on top:
+- **oops — the find.** India +1.59% BEATS tsmom's +1.15% on the same
+  window; best pooled avgR (0.38 india); mean-reversion style diversifies
+  a trend-heavy book (Unger's meta-lesson). Candidate to enable.
+- **vbo — marginal.** Positive but thin; negative on both long stress
+  sets; zero forex trades (k=1.0 never triggers on EURUSD dailies). Keep
+  OFF pending multi-year walk-forward.
+- **gsv — passed the letter of the bar, fails the spirit.** avgR 0.018 is
+  statistically indistinguishable from zero (38.4% win over 211 trades);
+  crypto carries the sum; worst stress profile in the grid (gfc −2.97%);
+  configured 1% risk is already HALF its Kelly. Keep OFF; re-examine only
+  after data/market_*_hist lands and walk_forward_validate can run.
