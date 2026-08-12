@@ -31,6 +31,7 @@ def make_portfolio_guard(*, equity_fn: Callable,
                          budget=None,
                          session_guard=None,
                          heat_mgr=None,
+                         prop_guard=None,
                          positions_fn: Optional[Callable] = None) -> Callable:
     """Returns async guard(req) -> (ok, reason) for OrderRouter.
 
@@ -50,6 +51,13 @@ def make_portfolio_guard(*, equity_fn: Callable,
         if session_guard is not None and session_guard.enabled:
             if not session_guard.allows_new_entries(equity):
                 return False, "session_guard:day_tripped"
+
+        if prop_guard is not None:
+            # MODULE 69: funded-account rules — OUR soft line sits inside
+            # the firm's hard line; entries refused long before a breach
+            ok, why = prop_guard.allows_new_entries(equity)
+            if not ok:
+                return False, why
 
         if heat_mgr is not None:
             tradable = budget.effective(equity) if budget is not None else equity

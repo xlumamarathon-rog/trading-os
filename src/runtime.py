@@ -84,7 +84,7 @@ async def build_runtime(cfg, *, mode: str, redis, connections, kill_brokers: dic
                         gate_path: str | Path = GATE_FILE,
                         signal_valid_fn=None, band_check_fn=None,
                         session_open_fn=None, alert_fn=None,
-                        budget=None, session_guard=None, heat_mgr=None,
+                        budget=None, session_guard=None, heat_mgr=None, prop_guard=None,
                         positions_fn=None, equity_fn=None,
                         india_apikey: str = "", algo_id: str = "") -> Runtime:
     if mode not in ("paper", "live"):
@@ -141,11 +141,12 @@ async def build_runtime(cfg, *, mode: str, redis, connections, kill_brokers: dic
     # wired them together (only research scripts and tests did). None of the
     # three configured -> no guard, exact legacy behavior.
     portfolio_guard_fn = None
-    if budget is not None or session_guard is not None or heat_mgr is not None:
+    if any(x is not None for x in (budget, session_guard, heat_mgr, prop_guard)):
         portfolio_guard_fn = make_portfolio_guard(
             equity_fn=equity_fn or balance_fn,       # async ok — guard tolerates both
             risk_limits=risk,                        # ramped view, same as sizing
             budget=budget, session_guard=session_guard, heat_mgr=heat_mgr,
+            prop_guard=prop_guard,
             positions_fn=positions_fn or (lambda: exit_mgr.positions.values()))
 
     router = OrderRouter(

@@ -131,6 +131,7 @@ def create_gateway(
     research_lab=None,                          # MODULE 63 ResearchLab
     strategy_engine=None,                       # MODULE 65 StrategyEngine
     riskmath_fn: Optional[Callable] = None,     # M66 (run_id) -> Kelly report
+    prop_fn: Optional[Callable] = None,         # M69 () -> prop status+math
 ) -> FastAPI:
     app = FastAPI(title="Trading OS Cockpit Gateway", docs_url=None, redoc_url=None)
 
@@ -426,6 +427,14 @@ def create_gateway(
         if riskmath_fn is None:
             return {"verdict": "risk optimizer not wired"}
         return await _maybe_await(riskmath_fn(run_id))
+
+    @app.get("/prop")
+    async def prop(actor: dict = Depends(authed)):
+        """MODULE 69 funded-account status: firm-rule budgets, soft-stop
+        state, target progress, and the challenge Monte Carlo."""
+        if prop_fn is None:
+            return {"enabled": False}
+        return await _maybe_await(prop_fn())
 
     @app.get("/strategies")
     async def strategies(actor: dict = Depends(authed)):

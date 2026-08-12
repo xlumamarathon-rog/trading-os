@@ -42,6 +42,8 @@ from src.ops.broker_settings import BrokerSettings
 from src.ops.cockpit_gateway import create_gateway
 from src.ops.market_clock import MarketClock
 from src.ops.paper_server import create_paper_server
+from src.ops.prop_rules import (PropGuard, PropRules,
+                                optimal_challenge_risk)
 from src.ops.live_feeds import (FeedMux, Mt5QuoteFeed, OpenAlgoQuoteFeed,
                                 YahooQuoteFeed)
 from src.ops.quote_feed import ReplayQuoteFeed
@@ -188,11 +190,20 @@ async def assemble(data_dir: Path):
     async def balance():
         return broker.equity()
 
+    # MODULE 69 — funded-account mode (config prop_firm.enabled or PROP=1).
+    # The PropGuard joins the guard stack: entries refused at the soft
+    # fraction of the firm's daily/total budgets, long before their line.
+    prop_cfg = dict((cfg.model_extra or {}).get("prop_firm") or {})
+    prop_enabled = bool(prop_cfg.pop("enabled", False)) or \
+        os.environ.get("PROP", "") == "1"
+    prop_guard = PropGuard(PropRules.from_cfg(prop_cfg)) if prop_enabled else None
+
     runtime = await build_runtime(
         cfg, mode="paper", redis=redis, connections=conns, kill_brokers={},
         india_margin_api=PaperMarginAPI(broker), mt5_margin_api=PaperMarginAPI(broker),
         balance_fn=balance, data_dir=data_dir,
         gate_path=data_dir / "gate_state.json",
+        prop_guard=prop_guard,
         india_apikey="PAPER", algo_id="ALGO-PAPER-1")
 
     events: list = []
@@ -220,6 +231,8 @@ async def assemble(data_dir: Path):
             "mfe_captured_pct": round(telemetry.mfe_captured_pct, 1),
             "sleeve": sleeve})
         engine.record_exit(sym, telemetry.realized_r)
+        if prop_guard is not None:
+            prop_guard.record_trade()
         note(f"exit {sym}: {telemetry.exit_reason} "
              f"({telemetry.realized_r:+.2f}R)")
     runtime.exit_mgr.on_exit = on_exit_cb
@@ -247,6 +260,9 @@ async def assemble(data_dir: Path):
             # MODULE 65: enabled sleeves evaluate on completed bars — same
             # router door as manual tickets, nothing fires while disabled
             await engine.on_tick()
+            if prop_guard is not None:
+                # firm-style mark: equity INCLUDING floating, every loop
+                prop_guard.on_equity(broker.equity())
             await asyncio.sleep(FEED_INTERVAL_S)
 
     # ---------------- gateway providers ----------------
@@ -325,6 +341,26 @@ async def assemble(data_dir: Path):
     settings = BrokerSettings(cfg, overlay_path=ROOT / "config/brokers_local.yaml")
     lab = ResearchLab(ROOT, out_root=ROOT / "data/research_runs")
 
+    def prop_report() -> dict:
+        if prop_guard is None:
+            return {"enabled": False,
+                    "note": "set prop_firm.enabled: true (or PROP=1) with "
+                            "your firm's rule numbers in config/master.yaml"}
+        status = prop_guard.on_equity(broker.equity())
+        rs = [t["realized_r"] for t in closed
+              if t.get("leg", "").startswith("mt5")] or \
+             [t["realized_r"] for t in closed]
+        out = {"enabled": True, "rules": prop_guard.rules.__dict__,
+               "status": status}
+        if len(rs) >= 10:
+            out["challenge_math"] = optimal_challenge_risk(
+                rs, rules=prop_guard.rules,
+                trades_per_day=max(0.5, len(rs) / 30), paths=800)
+        else:
+            out["challenge_note"] = (f"{len(rs)} closed trades — the "
+                                     "challenge Monte Carlo needs >= 10")
+        return out
+
     def riskmath(run_id: str = "") -> dict:
         """M66: Kelly report from a lab run's trades_r, or the live ledger."""
         configured = float(getattr(cfg.risk_limits, "max_risk_per_trade_pct",
@@ -367,7 +403,8 @@ async def assemble(data_dir: Path):
         broker_save_fn=settings.save,
         candles_fn=lambda symbol, n: feed.candles(symbol, n),
         close_position_fn=close_position, place_order_fn=place_order,
-        research_lab=lab, strategy_engine=engine, riskmath_fn=riskmath)
+        research_lab=lab, strategy_engine=engine, riskmath_fn=riskmath,
+        prop_fn=prop_report)
 
     # test/introspection handles (FastAPI's designed extension point)
     app.state.engine = engine

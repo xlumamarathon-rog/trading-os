@@ -32,6 +32,22 @@ risk_limits:
   margin_buffer_india: 0.05           # require 5% headroom over broker-required margin
   mt5_min_free_margin_pct: 0.30       # post-trade free margin must stay >= 30% of equity
 
+# MODULE 69 — funded-account (prop-firm) mode. DISABLED by default.
+# When enabled, a PropGuard layer joins the guard stack: new entries are
+# refused at soft_fraction of the firm's daily/total budgets — the firm's
+# hard line is never the first line. Defaults mirror the common FTMO-style
+# phase-1 rule set; set these to YOUR firm's actual numbers.
+prop_firm:
+  enabled: false
+  initial_balance: 10000        # the challenge account size (account ccy)
+  max_daily_loss_pct: 0.05
+  max_total_dd_pct: 0.10
+  trailing_dd: false
+  profit_target_pct: 0.10
+  min_trading_days: 4
+  soft_fraction: 0.60
+  day_reset_utc_hour: 21        # firm server midnight (CE(S)T)
+
 trading_hours:
   india:
     open: "09:15"

@@ -487,3 +487,52 @@ then built:
   three-deep chains (live→live→replay) work.
 - Tests: 506 passed / 1 skipped (+4 openalgo fixtures incl. the full
   degrade-to-yahoo chain); UI harness 76.
+
+---
+
+## 2026-08-13 — MODULE 69: funded-account (prop-firm) mode + challenge math
+
+Operator will trade forex via a funded account (FTMO-style evaluation).
+Built the rule set as a guard layer and the "optimize to pass" math as
+real math.
+
+- **src/ops/prop_rules.py — PropGuard**: firm rules config-driven
+  (prop_firm: block, DISABLED by default): daily-loss anchored to
+  day-start equity at the FIRM's server reset hour (not IST), equity
+  marks include floating, static or trailing max-DD, profit target, min
+  trading days. THE invariant: our soft line (60% of each firm budget)
+  refuses entries long before the firm's hard line; breach latches.
+  Wired as a 4th optional guard-stack layer (additive, default None —
+  legacy behavior proven intact).
+- **challenge_monte_carlo / optimal_challenge_risk**: bootstrap the
+  system's own R distribution through the firm's rules; sweep risk/trade
+  for the pass-probability peak. A challenge is an asymmetric one-shot
+  bet — its optimal aggression is a number.
+- **Real numbers** (pooled mt5-leg book: tsmom+oops+vbo on forex+crypto,
+  118 trades, 50% win, avgR +0.076; FTMO-style 10%/5%/10% phase-1):
+
+  | risk/trade | P(pass) | P(bust) | median days |
+  |---|---|---|---|
+  | 0.5% | 0.3% | 0% | 56 (times out) |
+  | 1.0% | 21.8% | 0% | 45 |
+  | 2.0% | 61.8% | 5.9% | 29 |
+  | **3.0%** | **72.6%** | 15.7% | 21 ← optimal |
+  | 6.0% | 49.6% | 50.4% | 6 (coin flip) |
+
+  Phase-2 (+5%) at 3%: 84.1% -> **P(both phases) = 61.1%** ≈ 1.6
+  challenge fees per funded account. Challenge-optimal risk (3%) is 3x
+  the wealth-optimal configured risk (1%) — correct per theory: the
+  challenge downside is capped at the fee. After funding, drop back.
+- **Gateway GET /prop** + run_paper wiring (PROP=1 or config): equity
+  marked every loop, traded days counted on exits, challenge math served
+  from the live mt5-leg ledger.
+- Operational notes for the operator: (1) daily-bar sleeves HOLD
+  overnight/weekends -> needs the firm's SWING account variant (regular
+  accounts often ban weekend holds); (2) most firms allow EAs but ban
+  latency arb/copy-trading — read the specific firm's ToS; (3) Oracle
+  free-tier ARM (4 OCPU/24GB) is ample for the engine, but the MT5
+  TERMINAL is Windows software — run it under Wine on the same box or a
+  tiny Windows VPS; the engine talks to it over the bridge either way.
+- Tests: 520 passed / 1 skipped (+14: firm-day rolls, soft-before-hard,
+  breach latching, trailing vs static DD, MC determinism + interior
+  peak, negative-edge-cannot-pass, guard-stack integration).
