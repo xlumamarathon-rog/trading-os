@@ -37,7 +37,9 @@ SAVE_ALLOWLIST: dict[str, set] = {
     "india": {"provider", "base_url", "default_exchange", "max_orders_per_sec"},
     "mt5": {"exec_service_url", "server_note"},
 }
-INDIA_PROVIDERS = ("dhan", "shoonya", "fyers", "zerodha")
+# angel = the 2026 data-feed verdict: free real-time NSE websocket +
+# documented headless re-login (see DEPLOY.md daily runbook + ledger)
+INDIA_PROVIDERS = ("dhan", "shoonya", "fyers", "zerodha", "angel", "upstox")
 
 # env vars the runtime resolves for each leg (report set/unset only)
 ENV_VARS = {

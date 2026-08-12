@@ -85,3 +85,40 @@
 ## Legal checklist before Phase C (spec §13)
 SEBI algo registration via broker (Algo IDs) · black-box/RA determination ·
 5-year audit retention confirmed · FEMA exposure on offshore MT5 acknowledged (operator's decision).
+
+
+---
+
+## India real-time data feed — the daily runbook (MODULE 68, Aug 2026)
+
+The engine reads india quotes from YOUR OpenAlgo hub (`FEED=openalgo` or
+`FEED=live`): batched `POST /api/v1/multiquotes` every ~1.5s (hub rate
+limit is 50/s — we use ~0.7/s), daily bars from `/api/v1/history`
+(interval "D"). Fail-soft chain: hub → Yahoo → replay; the cockpit's
+Settings page shows which layer is serving (a red DEGRADED chip means
+fix the hub, the system is meanwhile running on Yahoo).
+
+**Broker verdict for the data feed (researched 2026-08-12, ledger):**
+Angel One = free real-time NSE websocket + the only DOCUMENTED headless
+re-login (clientcode+PIN+TOTP POST — no browser). Dhan charges ₹499/mo
+for data API; Zerodha ₹500/mo; both need daily browser logins. Fyers is
+free but its unattended refresh flow is grey-zone. Upstox free (browser
+OAuth daily; its 1-year Analytics Token is read-only and can't drive
+OpenAlgo).
+
+**What breaks every morning:** OpenAlgo expires ALL sessions at 03:00 IST
+(SESSION_EXPIRY_TIME) and the broker token dies on its own schedule
+(Upstox 03:30, Zerodha 06:00, Fyers EOD, Dhan +24h). From then until you
+re-auth, /api/v1/quotes returns auth errors — the engine degrades to
+Yahoo automatically and says so.
+
+**Daily routine (~08:45 IST, before the 09:15 open):**
+1. Open the OpenAlgo web UI → log in.
+2. Connect broker (TOTP for angel/dhan; browser redirect for others).
+3. Wait for the master-contract download to finish.
+4. Health check: `curl -X POST localhost:5000/api/v1/quotes -H 'Content-Type: application/json' -d '{"apikey":"<key>","symbol":"RELIANCE","exchange":"NSE"}'`
+5. Confirm the cockpit Settings page shows `openalgo_hub` (not DEGRADED).
+
+Do NOT script browser logins or undocumented auth endpoints (ToS/2FA
+risk). Angel's loginByPassword is the one legitimately automatable path
+if unattended mornings become necessary.

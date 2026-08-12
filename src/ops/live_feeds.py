@@ -117,7 +117,11 @@ class _BaseLiveFeed:
                 except Exception:  # noqa: BLE001
                     pass
             if self.degraded:
-                return self.fallback.tick_once(now)
+                import inspect
+                res = self.fallback.tick_once(now)
+                if inspect.isawaitable(res):        # fallback may itself be live
+                    res = await res
+                return res
         await self._ensure_daily()
         if time.monotonic() - self._last_http < self.min_gap_s:
             return {}
@@ -284,6 +288,113 @@ class Mt5QuoteFeed(_BaseLiveFeed):
         return [{"date": dt.datetime.fromtimestamp(b["ts"], UTC).date().isoformat(),
                  "open": b["o"], "high": b["h"], "low": b["l"], "close": b["c"]}
                 for b in resp.json()]
+
+
+class OpenAlgoQuoteFeed(_BaseLiveFeed):
+    """India real-time via the operator's OWN OpenAlgo hub (MODULE 68).
+
+    The 'MT5 for India': one connection to the self-hosted hub; the broker
+    underneath (dhan | angel | fyers | zerodha | 20+ streaming adapters in
+    OpenAlgo) is swappable without touching this code. Shapes verified
+    against vendored OpenAlgo source + docs (R1):
+      POST /api/v1/multiquotes {apikey, symbols:[{symbol,exchange}...]}
+        -> {status, results:[{symbol, data:{ltp,bid,ask,open,high,low,...}}]}
+      POST /api/v1/history {apikey, symbol, exchange, interval:"D", ...}
+        -> {status, data:[{timestamp,open,high,low,close,volume}...]}
+
+    BATCHED: one multiquotes call covers the whole universe per poll —
+    against localhost this sustains ~1s cadence at trivial cost, which for
+    a daily-bar engine with broker-resident stops is operationally
+    equivalent to a websocket. The ws-proxy upgrade can replace _fetch_all
+    later without touching any consumer."""
+
+    kind = "openalgo_hub"
+
+    def __init__(self, symbols, *, base_url: str, apikey: str = "",
+                 exchange: str = "NSE",
+                 client: Optional[httpx.AsyncClient] = None,
+                 min_gap_s: float = 1.5, **kw) -> None:
+        super().__init__(symbols, min_gap_s=min_gap_s, **kw)
+        self._apikey = apikey
+        self._exchange = exchange
+        self._client = client or httpx.AsyncClient(
+            timeout=6.0, base_url=base_url.rstrip("/"))
+
+    async def _fetch_all(self, symbols) -> dict:
+        resp = await self._client.post("/api/v1/multiquotes", json={
+            "apikey": self._apikey,
+            "symbols": [{"symbol": s, "exchange": self._exchange}
+                        for s in symbols]})
+        resp.raise_for_status()
+        body = resp.json()
+        if body.get("status") != "success":
+            raise RuntimeError(f"openalgo multiquotes: {body.get('message')}")
+        out = {}
+        for row in body.get("results", []):
+            ltp = (row.get("data") or {}).get("ltp")
+            if ltp:
+                out[row["symbol"]] = float(ltp)
+        return out
+
+    async def _fetch_last(self, symbol: str) -> Optional[float]:
+        return (await self._fetch_all([symbol])).get(symbol)
+
+    async def _fetch_daily(self, symbol: str, n: int = 250) -> list:
+        end = dt.date.today()
+        start = end - dt.timedelta(days=int(n * 1.6) + 10)
+        resp = await self._client.post("/api/v1/history", json={
+            "apikey": self._apikey, "symbol": symbol,
+            "exchange": self._exchange, "interval": "D",
+            "start_date": start.isoformat(), "end_date": end.isoformat()})
+        resp.raise_for_status()
+        body = resp.json()
+        if body.get("status") != "success":
+            raise RuntimeError(f"openalgo history: {body.get('message')}")
+        out = []
+        for b in body.get("data", []):
+            out.append({"date": str(b["timestamp"])[:10],
+                        "open": float(b["open"]), "high": float(b["high"]),
+                        "low": float(b["low"]), "close": float(b["close"])})
+        return out[-n:]
+
+    async def tick_once(self, now: Optional[dt.datetime] = None) -> dict:
+        """Batched override: ONE multiquotes call for every OPEN symbol."""
+        now = now or dt.datetime.now(UTC)
+        if self.degraded and self.fallback is not None:
+            if time.monotonic() - self._last_http >= self.min_gap_s:
+                self._last_http = time.monotonic()
+                try:
+                    if await self._fetch_all(self.symbols[:1]):
+                        self._errors = 0
+                        self.degraded = False
+                except Exception:  # noqa: BLE001
+                    pass
+            if self.degraded:
+                import inspect
+                res = self.fallback.tick_once(now)
+                if inspect.isawaitable(res):
+                    res = await res
+                return res
+        await self._ensure_daily()
+        if time.monotonic() - self._last_http < self.min_gap_s:
+            return {}
+        open_syms = [s for s in self.symbols if self._leg_open(s, now)]
+        if not open_syms:
+            return {}
+        self._last_http = time.monotonic()
+        try:
+            ticks = await self._fetch_all(open_syms)
+        except Exception:  # noqa: BLE001 — strike, maybe degrade
+            self._errors += 1
+            if self._errors >= self.max_errors and self.fallback is not None:
+                self.degraded = True
+            return {}
+        self._errors = 0
+        for sym, px in ticks.items():
+            self._last[sym] = px
+            self._aggregate(sym, px, now)
+            self._roll_daily(sym, now)
+        return ticks
 
 
 class FeedMux:

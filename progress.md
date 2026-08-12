@@ -455,3 +455,35 @@ DISABLED; registry admission ≠ activation). Honest recommendation on top:
   crypto carries the sum; worst stress profile in the grid (gfc −2.97%);
   configured 1% risk is already HALF its Kelly. Keep OFF; re-examine only
   after data/market_*_hist lands and walk_forward_validate can run.
+
+---
+
+## 2026-08-13 — MODULE 68: india real-time via the OpenAlgo hub (FEED=openalgo|live)
+
+The "MT5 for India", researched from official docs + vendored source (R1),
+then built:
+
+- **Research verdict (docs.openalgo.in + broker docs, cited in-thread):**
+  OpenAlgo serves REST market data (/api/v1/quotes, /multiquotes,
+  /history, 50/s limit) and a ws proxy (:8765, LTP/Quote/Depth) over 36
+  broker plugins. For the DATA feed: **Angel One = free real-time NSE ws
+  + the only documented headless re-login**; Dhan (our config default)
+  charges ₹499/mo for data; Zerodha ₹500/mo; Fyers free but grey-zone
+  unattended auth; Upstox free w/ daily browser OAuth. Daily breakage is
+  structural: OpenAlgo session expiry 03:00 IST + broker token expiry →
+  DEPLOY.md morning runbook added.
+- **OpenAlgoQuoteFeed** (src/ops/live_feeds.py): BATCHED — one
+  multiquotes call covers the whole india universe per poll (~1.5s gap vs
+  the 50/s hub limit); daily bars from /history interval "D" with live
+  bar roll-on; session-aware (no polls when NSE closed); fail-soft chain
+  openalgo → yahoo → replay with auto-recovery probing. Payload shapes
+  from the vendored docs, fixture-tested (no live network).
+- **run_paper**: FEED=openalgo (india on hub, rest on Yahoo) and
+  FEED=live (india on hub, mt5 legs on the bridge) — the full doctrine.
+- **Settings page**: india card now shows the live data-feed layer
+  (openalgo_hub / yahoo_live / DEGRADED_replay); provider list gains
+  angel + upstox with fee notes.
+- Base-feed fix: fallback delegation is now awaitable-tolerant so
+  three-deep chains (live→live→replay) work.
+- Tests: 506 passed / 1 skipped (+4 openalgo fixtures incl. the full
+  degrade-to-yahoo chain); UI harness 76.

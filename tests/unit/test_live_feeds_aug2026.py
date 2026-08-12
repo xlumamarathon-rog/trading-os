@@ -190,3 +190,104 @@ def test_make_feed_selects_by_env(tmp_path):
     # doctrine: india routed to yahoo, mt5 legs to the bridge
     assert isinstance(mux._feed_for("RELIANCE"), YahooQuoteFeed)
     assert isinstance(mux._feed_for("EURUSD"), Mt5QuoteFeed)
+
+
+# ---------------------------------------------------------------- openalgo
+
+from src.ops.live_feeds import OpenAlgoQuoteFeed
+
+
+def openalgo_transport(requests_log, fail=False):
+    """Fixtures shaped EXACTLY per vendored OpenAlgo docs (R1):
+    docs/api/market-data/multiquotes.md + history.md."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode())
+        requests_log.append((request.url.path, body))
+        if fail:
+            raise httpx.ConnectError("hub down", request=request)
+        if request.url.path == "/api/v1/multiquotes":
+            return httpx.Response(200, json={
+                "status": "success",
+                "results": [{"symbol": s["symbol"], "exchange": "NSE",
+                             "data": {"open": 1542.3, "high": 1571.6,
+                                      "low": 1540.5, "ltp": 1569.9,
+                                      "prev_close": 1539.7, "ask": 1569.9,
+                                      "bid": 1569.8, "oi": 0,
+                                      "volume": 14054299}}
+                            for s in body["symbols"]]})
+        if request.url.path == "/api/v1/history":
+            return httpx.Response(200, json={
+                "status": "success",
+                "data": [{"timestamp": f"2026-07-{d:02d} 00:00:00+05:30",
+                          "open": 1500.0, "high": 1520.0, "low": 1490.0,
+                          "close": 1510.0, "volume": 1000000}
+                         for d in range(1, 31)]})
+        return httpx.Response(404)
+
+    return httpx.MockTransport(handler)
+
+
+def make_openalgo(tmp_path, log, *, fail=False, fallback=None, max_errors=3):
+    client = httpx.AsyncClient(transport=openalgo_transport(log, fail),
+                               base_url="http://127.0.0.1:5000")
+    return OpenAlgoQuoteFeed(
+        ["RELIANCE", "TCS"], base_url="http://127.0.0.1:5000",
+        apikey="OA-KEY", client=client, min_gap_s=0.0, max_errors=max_errors,
+        fallback=fallback if fallback is not None else replay_fallback(tmp_path))
+
+
+async def test_openalgo_batches_the_whole_universe_in_one_call(tmp_path):
+    log = []
+    feed = make_openalgo(tmp_path, log)
+    out = await feed.tick_once(SESSION_OPEN)
+    assert out == {"RELIANCE": 1569.9, "TCS": 1569.9}
+    quote_calls = [b for p, b in log if p == "/api/v1/multiquotes"]
+    assert len(quote_calls) == 1                    # ONE call, both symbols
+    assert quote_calls[0]["apikey"] == "OA-KEY"     # documented auth field
+    assert {s["symbol"] for s in quote_calls[0]["symbols"]} == {"RELIANCE", "TCS"}
+    assert all(s["exchange"] == "NSE" for s in quote_calls[0]["symbols"])
+
+
+async def test_openalgo_daily_history_from_the_hub(tmp_path):
+    log = []
+    feed = make_openalgo(tmp_path, log)
+    await feed.tick_once(SESSION_OPEN)
+    bars = feed.bars_window("RELIANCE", 200)
+    # 30 fixture bars + today's live bar rolled on top (correct M65 behavior:
+    # the live mark becomes the forming daily bar)
+    assert len(bars) == 31
+    assert bars[-2]["close"] == 1510.0             # last completed = fixture
+    assert bars[-1]["close"] == 1569.9             # forming bar = live ltp
+    hist_calls = [b for p, b in log if p == "/api/v1/history"]
+    assert hist_calls and hist_calls[0]["interval"] == "D"   # documented token
+
+
+async def test_openalgo_session_aware_no_polls_at_night(tmp_path):
+    log = []
+    clock = MarketClock(HOURS)
+    client = httpx.AsyncClient(transport=openalgo_transport(log),
+                               base_url="http://127.0.0.1:5000")
+    feed = OpenAlgoQuoteFeed(["RELIANCE"], base_url="http://127.0.0.1:5000",
+                             apikey="K", client=client, min_gap_s=0.0,
+                             market_clock=clock,
+                             symbol_legs={"RELIANCE": "india"},
+                             fallback=replay_fallback(tmp_path))
+    out = await feed.tick_once(SESSION_CLOSED)      # 21:30 IST
+    assert out == {}
+    assert [p for p, _ in log if p == "/api/v1/multiquotes"] == []
+
+
+async def test_openalgo_degrades_through_the_full_chain_to_yahoo(tmp_path):
+    """The doctrine chain: openalgo (dead) -> yahoo (alive) -> replay."""
+    ylog = []
+    yahoo = make_yahoo(tmp_path, ylog)              # healthy yahoo w/ replay fb
+    olog = []
+    feed = make_openalgo(tmp_path, olog, fail=True, fallback=yahoo,
+                         max_errors=2)
+    for _ in range(3):                              # strike out the hub
+        await feed.tick_once(SESSION_OPEN)
+    assert feed.degraded is True
+    out = await feed.tick_once(SESSION_OPEN)        # served by YAHOO now
+    assert out == {"RELIANCE": 1311.8}              # yahoo fixture price
+    assert "DEGRADED" in feed.status()["kind"]

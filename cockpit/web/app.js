@@ -130,6 +130,7 @@ const demo = {
     { symbol: "EURUSD", leg: "mt5_forex", qty: 0.5, entry: 1.0852, stop: 1.0852, r_now: 1.1, state: "BREAKEVEN", mfe_r: 1.3 },
   ],
   workers: { var_worker: true, exit_manager: true, anomaly_guard: true, news_poll: true, reconciler: false },
+  feed: { kind: "replay_real_history" },
   approvals: [
     { id: "rule-7", label: "Rule: skip entries when GEX regime = amplify + severity ≥ 7 (holdout p=0.04)" },
     { id: "model-v3", label: "Model promotion v3: Brier 0.184→0.171, after-cost +6.2% on holdout" },
@@ -945,6 +946,7 @@ async function renderBrokers() {
     return;
   }
   const i = b.india;
+  const feedKind = ((state.lastState || {}).feed || {}).kind || "\u2014";
   $("broker-india").innerHTML = `
     <div class="kv"><b>hub</b><span>${esc(i.hub || "openalgo")}</span></div>
     <div class="kv"><b>provider</b><span>${esc(i.provider || "—")}</span></div>
@@ -952,7 +954,8 @@ async function renderBrokers() {
     <div class="kv"><b>exchange</b><span>${esc(i.default_exchange || "—")}</span></div>
     <div class="kv"><b>credentials</b><span>${envChips(i.env)}</span></div>
     <div class="kv"><b>static IP gate</b><span class="${i.static_ip_confirmed ? "pos" : "neg"}">
-      ${i.static_ip_confirmed ? "confirmed" : "NOT confirmed — set on VPS only"}</span></div>`;
+      ${i.static_ip_confirmed ? "confirmed" : "NOT confirmed — set on VPS only"}</span></div>
+    <div class="kv"><b>data feed</b><span class="${feedKind.includes("DEGRADED") ? "neg" : "pos"}">${esc(feedKind)}</span></div>`;
   if (i.provider) $("bk-provider").value = i.provider;
   if (!$("bk-baseurl").value) $("bk-baseurl").value = i.base_url || "";
 

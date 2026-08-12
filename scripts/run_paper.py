@@ -42,7 +42,8 @@ from src.ops.broker_settings import BrokerSettings
 from src.ops.cockpit_gateway import create_gateway
 from src.ops.market_clock import MarketClock
 from src.ops.paper_server import create_paper_server
-from src.ops.live_feeds import FeedMux, Mt5QuoteFeed, YahooQuoteFeed
+from src.ops.live_feeds import (FeedMux, Mt5QuoteFeed, OpenAlgoQuoteFeed,
+                                YahooQuoteFeed)
 from src.ops.quote_feed import ReplayQuoteFeed
 from src.ops.research_lab import ResearchLab
 from src.ops.risk_optimizer import report as riskmath_report
@@ -119,6 +120,35 @@ def make_feed(mode: str, uni: dict, clock, cfg):
         syms = list(uni)
         return YahooQuoteFeed(syms, market_clock=clock, symbol_legs=legs,
                               fallback=replay_for(syms))
+    if mode in ("openalgo", "live"):
+        # the full doctrine: india on the operator's OpenAlgo hub
+        # (openalgo -> yahoo -> replay chain), mt5 legs on the bridge when
+        # FEED=live (bridge -> replay), yahoo otherwise
+        in_syms = [s for s, m in uni.items() if m["leg"] == "india"]
+        other = [s for s in uni if s not in in_syms]
+        india_cfg = (cfg.model_extra or {}).get("broker", {}).get("india", {})
+        yahoo_chain = YahooQuoteFeed(
+            in_syms, market_clock=clock,
+            symbol_legs={s: legs[s] for s in in_syms},
+            fallback=replay_for(in_syms))
+        india_feed = OpenAlgoQuoteFeed(
+            in_syms, base_url=india_cfg.get("base_url", "http://127.0.0.1:5000"),
+            apikey=os.environ.get("INDIA_BROKER_API_KEY", ""),
+            market_clock=clock, symbol_legs={s: legs[s] for s in in_syms},
+            fallback=yahoo_chain)
+        if mode == "live":
+            mt5_cfg = (cfg.model_extra or {}).get("broker", {}).get("mt5", {})
+            other_feed = Mt5QuoteFeed(
+                other, base_url=mt5_cfg.get("exec_service_url", ""),
+                token=os.environ.get("MT5_SERVICE_TOKEN", ""),
+                market_clock=clock, symbol_legs={s: legs[s] for s in other},
+                fallback=replay_for(other))
+        else:
+            other_feed = YahooQuoteFeed(
+                other, market_clock=clock,
+                symbol_legs={s: legs[s] for s in other},
+                fallback=replay_for(other))
+        return FeedMux({india_feed: in_syms, other_feed: other})
     if mode == "mt5":
         # feed doctrine: mt5 legs on the broker's own bridge feed,
         # india on Yahoo (until the OpenAlgo websocket lands)
