@@ -81,3 +81,37 @@ class Mt5Aiomql:
         await self._ensure()
         order = self._Order(symbol=symbol, volume=float(lots), type=self._OrderType.SELL)
         await order.send()
+
+    # ---- market data (Aug 2026) — the terminal's own feed is the ONLY
+    # correct forex/CFD price source for anything that executes on MT5:
+    # it is the broker's real bid/ask including their spread. Verified
+    # against vendor source (aiomql core/meta_trader.py): symbol_info_tick
+    # and copy_rates_from_pos.
+
+    def _meta(self):
+        if not hasattr(self, "_mt"):
+            from aiomql import MetaTrader  # type: ignore
+            self._mt = MetaTrader()
+        return self._mt
+
+    async def tick(self, symbol: str) -> Optional[dict]:
+        await self._ensure()
+        t = await self._meta().symbol_info_tick(symbol)
+        if t is None:
+            return None
+        return {"symbol": symbol, "bid": float(t.bid), "ask": float(t.ask),
+                "last": float(getattr(t, "last", 0.0) or (t.bid + t.ask) / 2),
+                "time": int(t.time)}
+
+    async def candles(self, symbol: str, timeframe: str, count: int) -> list:
+        await self._ensure()
+        from aiomql import TimeFrame  # type: ignore
+        tf = getattr(TimeFrame, timeframe, None)
+        if tf is None:
+            raise ValueError(f"unknown timeframe {timeframe!r}")
+        rates = await self._meta().copy_rates_from_pos(symbol, int(tf), 0, count)
+        if rates is None:
+            return []
+        # ndarray columns: time, open, high, low, close, tick_volume, ...
+        return [{"ts": int(r[0]), "o": float(r[1]), "h": float(r[2]),
+                 "l": float(r[3]), "c": float(r[4])} for r in rates]

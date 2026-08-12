@@ -363,3 +363,29 @@ Conclusion: Yahoo chart API = the credential-free unified source for the
 paper cockpit's live feed (same pedigree as the bundled data); broker
 feeds remain the production path. Feed interface (M62) already designed
 for the swap.
+
+---
+
+## 2026-08-12 — feed doctrine + MT5 bridge market data (real-time for live)
+
+Operator (correctly): delayed data is acceptable for paper, never for live.
+Doctrine recorded: **trade on the feed you execute on.**
+
+| mode | india leg | mt5 legs (forex/crypto CFD) |
+|---|---|---|
+| live | OpenAlgo broker websocket | MT5 terminal's own feed |
+| paper | Yahoo (1-2s, verified) or replay | MT5 DEMO feed (real-time, free) or Yahoo |
+| research | Yahoo / bundled | Yahoo / bundled |
+
+MT5 is the CORRECT forex source for the mt5 legs: symbol_info_tick /
+copy_rates_from_pos give the broker's real bid/ask INCLUDING their spread
+(Yahoo's =X symbols are blended mids — charts yes, execution no), real-time
+with any account including demo. Latency risk is bounded by design: the
+strategies are daily-bar systems and protective stops are BROKER-RESIDENT
+(spec §12) — a dead feed can cost entry slippage, never an unprotected book.
+
+Shipped: mt5_service now serves GET /tick/{symbol} and
+GET /candles/{symbol}?timeframe=&count= — same X-MT5-Auth posture as exec
+endpoints, 503 fail-loud when the terminal is down, count capped at 1000.
+aiomql impl verified against vendor source (core/meta_trader.py) per R1.
+Tests: 481 passed / 1 skipped (+2).

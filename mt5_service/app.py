@@ -85,4 +85,30 @@ def create_mt5_service(mt5, *, auth_token: Optional[str] = None) -> FastAPI:
         await mt5.close(body.symbol, body.lots)
         return {"ok": True}
 
+    # ---- market data (Aug 2026): the terminal's own bid/ask + candles.
+    # Read-only but still auth-gated — prices are harmless, but a private
+    # exec service keeps ONE posture, and account-currency ticks can leak
+    # broker/account details. 503 when the terminal is down (fail-loud).
+
+    @app.get("/tick/{symbol}")
+    async def tick(symbol: str, _: None = Depends(require_auth)):
+        if not await mt5.is_connected():
+            raise HTTPException(status_code=503, detail="mt5 terminal disconnected")
+        t = await mt5.tick(symbol)
+        if t is None:
+            raise HTTPException(status_code=404, detail=f"no tick for {symbol!r}")
+        return t
+
+    @app.get("/candles/{symbol}")
+    async def candles(symbol: str, timeframe: str = "M5", count: int = 100,
+                      _: None = Depends(require_auth)):
+        if not await mt5.is_connected():
+            raise HTTPException(status_code=503, detail="mt5 terminal disconnected")
+        try:
+            rows = await mt5.candles(symbol, timeframe,
+                                     max(2, min(int(count), 1000)))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return rows
+
     return app

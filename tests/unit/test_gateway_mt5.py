@@ -108,6 +108,18 @@ class FakeMt5:
     async def close(self, symbol, lots):
         self.closed = (symbol, lots)
 
+    async def tick(self, symbol):
+        if symbol == "GHOST":
+            return None
+        return {"symbol": symbol, "bid": 1.1500, "ask": 1.1502,
+                "last": 1.1501, "time": 1786600000}
+
+    async def candles(self, symbol, timeframe, count):
+        if timeframe not in ("M1", "M5", "M15", "H1", "D1"):
+            raise ValueError(f"unknown timeframe {timeframe!r}")
+        return [{"ts": 1786600000 + i * 300, "o": 1.15, "h": 1.151,
+                 "l": 1.149, "c": 1.1505} for i in range(count)]
+
 
 def mt5_client(app):
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://mt5")
@@ -140,6 +152,36 @@ async def test_mt5_stop_endpoints_match_m35_adapter_contract():
         assert (await c.post("/position/modify", json={"position_id": "POS-9", "sl": 59000})).status_code == 200
         assert fake.last_modify == ("POS-9", 59000)
         assert (await c.post("/position/close", json={"symbol": "BTCUSD", "lots": 0.5})).status_code == 200
+
+
+async def test_mt5_market_data_endpoints():
+    """Aug 2026: the bridge now serves the terminal's OWN bid/ask + candles —
+    the only correct live forex/CFD price source (broker spread included)."""
+    app = create_mt5_service(FakeMt5())
+    async with mt5_client(app) as c:
+        t = (await c.get("/tick/EURUSD")).json()
+        assert t["bid"] == 1.15 and t["ask"] == 1.1502   # bid/ask, not a mid
+        assert (await c.get("/tick/GHOST")).status_code == 404
+        rows = (await c.get("/candles/EURUSD?timeframe=M5&count=50")).json()
+        assert len(rows) == 50
+        assert set(rows[0]) == {"ts", "o", "h", "l", "c"}
+        assert (await c.get("/candles/EURUSD?timeframe=M7")).status_code == 400
+        # count cap: never let a client drag 1e9 bars through the bridge
+        rows = (await c.get("/candles/EURUSD?count=999999")).json()
+        assert len(rows) <= 1000
+
+
+async def test_mt5_market_data_auth_and_disconnect():
+    """Same posture as exec endpoints: shared secret + 503 when down."""
+    app = create_mt5_service(FakeMt5(), auth_token="SECRET-9")
+    async with mt5_client(app) as c:
+        assert (await c.get("/tick/EURUSD")).status_code == 401
+        ok = await c.get("/tick/EURUSD", headers={"X-MT5-Auth": "SECRET-9"})
+        assert ok.status_code == 200
+    app = create_mt5_service(FakeMt5(connected=False))
+    async with mt5_client(app) as c:
+        assert (await c.get("/tick/EURUSD")).status_code == 503
+        assert (await c.get("/candles/EURUSD")).status_code == 503
 
 
 # ---------- M45 web UI serving ----------
