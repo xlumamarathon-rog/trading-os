@@ -1,0 +1,56 @@
+{
+ "AUDUSD": {
+  "bars_total": 202,
+  "bars_in_window": 136,
+  "window": "2026-02-05 \u2192 2026-08-13",
+  "start_px": 0.69944,
+  "end_px": 0.705268,
+  "period_return_pct": 0.83,
+  "real_max_drawdown_pct": 5.37
+ },
+ "USDCAD": {
+  "bars_total": 202,
+  "bars_in_window": 136,
+  "window": "2026-02-05 \u2192 2026-08-13",
+  "start_px": 1.36692,
+  "end_px": 1.3945,
+  "period_return_pct": 2.02,
+  "real_max_drawdown_pct": 2.83
+ },
+ "NZDUSD": {
+  "bars_total": 202,
+  "bars_in_window": 136,
+  "window": "2026-02-05 \u2192 2026-08-13",
+  "start_px": 0.599819,
+  "end_px": 0.584044,
+  "period_return_pct": -2.63,
+  "real_max_drawdown_pct": 7.02
+ },
+ "EURJPY": {
+  "bars_total": 202,
+  "bars_in_window": 136,
+  "window": "2026-02-05 \u2192 2026-08-13",
+  "start_px": 185.182999,
+  "end_px": 183.735001,
+  "period_return_pct": -0.78,
+  "real_max_drawdown_pct": 4.37
+ },
+ "GBPJPY": {
+  "bars_total": 202,
+  "bars_in_window": 136,
+  "window": "2026-02-05 \u2192 2026-08-13",
+  "start_px": 214.089996,
+  "end_px": 214.867004,
+  "period_return_pct": 0.36,
+  "real_max_drawdown_pct": 4.46
+ },
+ "XAUUSD": {
+  "bars_total": 194,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 4861.399902,
+  "end_px": 4408.899902,
+  "period_return_pct": -9.31,
+  "real_max_drawdown_pct": 25.16
+ }
+}

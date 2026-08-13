@@ -18,7 +18,8 @@ broker:
     server: ${MT5_SERVER}
     exec_service_url: https://mt5-vps.internal:8443
     symbol_classes:
-      forex: [EURUSD, GBPUSD, USDJPY, XAUUSD]
+      forex: [EURUSD, GBPUSD, USDJPY, XAUUSD, AUDUSD, USDCAD, NZDUSD,
+              EURJPY, GBPJPY]
       crypto_cfd: [BTCUSD, ETHUSD]
 
 risk_limits:

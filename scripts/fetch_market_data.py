@@ -45,6 +45,24 @@ MARKETS = {
         "ETHUSD": {"yh": "ETH-USD", "leg": "mt5_crypto", "lot": 0.1, "adv": 2e9,
                    "half_spread": 1.2, "commission_pct": 0.0},
     },
+    # Aug 2026: wider mt5-forex book — fattens the funded-account evidence
+    # (M69 challenge math). Yahoo tickers probed live 2026-08-13; XAUUSD has
+    # no Yahoo spot symbol -> GC=F (COMEX daily) is the honest proxy for the
+    # MT5 gold CFD. Half-spreads: typical raw-ECN all-in per side.
+    "forex_wide": {
+        "AUDUSD": {"yh": "AUDUSD=X", "leg": "mt5_forex", "lot": 1000, "adv": 3e11,
+                   "half_spread": 0.00007, "commission_pct": 0.000035},
+        "USDCAD": {"yh": "CAD=X", "leg": "mt5_forex", "lot": 1000, "adv": 2.5e11,
+                   "half_spread": 0.00008, "commission_pct": 0.000035},
+        "NZDUSD": {"yh": "NZDUSD=X", "leg": "mt5_forex", "lot": 1000, "adv": 1e11,
+                   "half_spread": 0.0001, "commission_pct": 0.000035},
+        "EURJPY": {"yh": "EURJPY=X", "leg": "mt5_forex", "lot": 1000, "adv": 2e11,
+                   "half_spread": 0.012, "commission_pct": 0.000035},
+        "GBPJPY": {"yh": "GBPJPY=X", "leg": "mt5_forex", "lot": 1000, "adv": 1e11,
+                   "half_spread": 0.018, "commission_pct": 0.000035},
+        "XAUUSD": {"yh": "GC=F", "leg": "mt5_forex", "lot": 1, "adv": 2e11,
+                   "half_spread": 0.20, "commission_pct": 0.000035},
+    },
 }
 
 

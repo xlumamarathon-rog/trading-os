@@ -549,3 +549,35 @@ minimum, the firm rulebook (incl. the 21:00 UTC firm-day reset and our
 60% soft line), and the challenge-math table with the pass-optimal risk
 row starred. Demo fixture carries the REAL M69 Monte Carlo numbers
 (3%/trade -> 72.6% phase-1). UI harness: 85 checks (+9).
+
+---
+
+## 2026-08-13 — forex_wide dataset: the challenge estimate DOWNGRADED (that's the point)
+
+Fattened the mt5-leg evidence before any challenge fee: fetched real
+6-month data for AUDUSD, USDCAD, NZDUSD, EURJPY, GBPJPY, XAUUSD (Yahoo,
+tickers probed live; XAUUSD proxied by GC=F COMEX daily — no Yahoo spot
+gold). New committed dataset data/market_forex_wide_6m (136 report bars/
+pair; XAUUSD window includes a real -9.3%/25%-DD stretch). New pairs
+added to symbol_classes.forex (classification-critical) and the live-feed
+map; tsmom india certified results proven IDENTICAL after the config
+edit.
+
+Replays (all CLEAN, chain OK): tsmom -0.02% (39 tr), oops +0.35% (15 tr),
+vbo -0.41% (13 tr) — the sleeves do NOT obviously generalize to the wider
+pair set.
+
+**Challenge math, fattened pooled book (185 trades vs 118):**
+- edge: win 48.1% (CI 41-55%), avgR +0.077 — but empirical Kelly nearly
+  HALVED: 21.9% -> 11.8% (new pairs alone: 6.0%)
+- optimal challenge risk moved DOWN 3% -> 2%/trade; at the old "optimal"
+  3% the bust probability is now 37.4%
+- P(pass phase 1) 67.1% @ 2%; phase 2 79.3%; **P(both) = 53.2%** vs the
+  64.2% apples-to-apples baseline — the small-sample optimism is gone.
+  ~1.9 challenge fees per funded account expected.
+
+Discipline note: pruning the weak new pairs from the book AFTER seeing
+these results would be in-sample selection — per-pair inclusion must be
+blessed by walk-forward on multi-year data, not by this 6-month look.
+Until then the honest challenge book is the pairs where the edge was
+originally validated (EURUSD/GBPUSD/USDJPY + crypto), sized at 2%.

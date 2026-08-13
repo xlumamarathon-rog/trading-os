@@ -1,0 +1,47 @@
+{
+ "symbols": {
+  "AUDUSD": {
+   "leg": "mt5_forex",
+   "lot": 1000,
+   "adv": 300000000000.0,
+   "half_spread": 7e-05,
+   "commission_pct": 3.5e-05
+  },
+  "USDCAD": {
+   "leg": "mt5_forex",
+   "lot": 1000,
+   "adv": 250000000000.0,
+   "half_spread": 8e-05,
+   "commission_pct": 3.5e-05
+  },
+  "NZDUSD": {
+   "leg": "mt5_forex",
+   "lot": 1000,
+   "adv": 100000000000.0,
+   "half_spread": 0.0001,
+   "commission_pct": 3.5e-05
+  },
+  "EURJPY": {
+   "leg": "mt5_forex",
+   "lot": 1000,
+   "adv": 200000000000.0,
+   "half_spread": 0.012,
+   "commission_pct": 3.5e-05
+  },
+  "GBPJPY": {
+   "leg": "mt5_forex",
+   "lot": 1000,
+   "adv": 100000000000.0,
+   "half_spread": 0.018,
+   "commission_pct": 3.5e-05
+  },
+  "XAUUSD": {
+   "leg": "mt5_forex",
+   "lot": 1,
+   "adv": 200000000000.0,
+   "half_spread": 0.2,
+   "commission_pct": 3.5e-05
+  }
+ },
+ "report_from": "2026-02-05"
+}
