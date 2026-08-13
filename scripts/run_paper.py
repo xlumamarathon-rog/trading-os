@@ -175,6 +175,17 @@ async def assemble(data_dir: Path):
     clock = MarketClock((cfg.model_extra or {}).get("trading_hours"))
     feed = make_feed(os.environ.get("FEED", "replay").lower(), uni, clock, cfg)
 
+    # M70: FLOW_TELEMETRY=1 attaches the order-flow PROXY recorder to every
+    # live feed that carries bid/ask/volume snapshots. Records only — nothing
+    # in the trading path reads this file. Replay feeds have no .flow and
+    # nothing to record (no live book), so they are skipped by design.
+    if os.environ.get("FLOW_TELEMETRY") == "1":
+        from src.ops.flow_telemetry import FlowTelemetry
+        flow = FlowTelemetry(ROOT / "data/runtime/flow_telemetry.jsonl")
+        for f in getattr(feed, "_feeds", [feed]):
+            if hasattr(f, "flow"):
+                f.flow = flow
+
     broker = PaperBroker(
         costs=cfg.execution_costs.india, impact=cfg.execution_costs.impact_model,
         starting_cash=float(os.environ.get("STARTING_CASH", "1000000")),

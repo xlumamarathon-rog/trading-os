@@ -747,3 +747,71 @@ Five pre-registered fix experiments proposed (docs §7): FIX-LOOKAHEAD,
 FIX-TIMESTOP-UNIT, FIX-TELEMETRY (trades_r_cash), EXIT-STYLE per-style
 profiles, SIZING vol-target. None run yet; each changes certified
 numbers BY DESIGN and requires explicit re-baselining + suite green.
+
+---
+
+## 2026-08-13 (night) — ORDERFLOW REELS ADJUDICATED + M70 flow-proxy telemetry
+
+Two NIFTY scalping reels ("Reason Behind Moves 1/2 — Proper Data
+Analysis") analyzed frame-by-frame + audio-transcribed (Hindi). Method
+taught: per-candle DELTA ledger on a GoCharting NSE footprint — rank
+each candle's delta vs the day's largest ("skeleton"), fade big-delta-
+no-progress (absorption), short new highs on shrinking->negative delta
+(35k->13k->18k->-70k = the exact on-screen strip 70.33K/35.43K/13.39K/
+18.53K->negative), size by conviction (20 vs 50 lots), mock candle-color
+readers. Presenter sells "Brahmastra"/"AI Reversal" indicators (visible
+browser tabs + DM-for-indicator caption).
+
+RESEARCH VERDICT (3 agents, full provenance in-thread):
+- The SCIENCE is real: signed order flow drives price (Cont-Kukanov-
+  Stoikov 2014: OFI R^2 65% contemporaneous @10s). But footprint delta
+  is the WEAK half (trade imbalance R^2 32%, redundant vs OFI) and the
+  strong half (limit-order adds/cancels) is NOT VISIBLE on a footprint.
+- The TAUGHT PATTERNS (delta divergence, absorption, stacked imbalances)
+  have ZERO published tests anywhere; CVD/price divergence is the
+  DEFAULT state of a persistent series vs a random walk (CRS 2002).
+- Horizon kills it for us: signal life = 1 tick..5 min (India: strong
+  5 min, gone by 30 — FRL 2021); 1-min-ahead OOS R^2 NEGATIVE (Cont-
+  Cucuringu-Zhang 2023). Captured by colocated HFT (54% of NSE cash
+  turnover is algo; 61.5% of derivatives turnover is colo).
+- DATA REALITY: NSE retail feeds are 1-SECOND SNAPSHOTS by spec (no
+  trade tape, no aggressor flag; brokers say so verbatim) -> true
+  footprint on NSE is PERMANENTLY out of retail reach; historical
+  tick/depth: not sold at any retail tier (TrueData sells a rolling
+  20-day tick window). MT5 spot FX: OTC -> delta is a CATEGORY ERROR
+  (no executed-deal data; tick_volume = quote updates). SEBI FY25: 91%
+  of individual equity-derivative traders lost money (avg -Rs 1.1L).
+
+DO WE ANALYZE THIS DEEPLY PRE-TRADE? Two different axes, honestly:
+he reads market microstructure deeply and manages risk by vibes; we
+gate RISK through 12 code-enforced layers (signal/regime/session/VAR/
+heat/budget/anomaly/event/margin/kill/prop) and read ZERO microstructure
+(no volume until today, no bid/ask, no intraday structure). His axis is
+data we cannot get honestly; our axis is what keeps accounts alive.
+
+SHIPPED (branch research/worldbest-aug2026):
+- fetch_market_data.py now KEEPS Yahoo volume (audit §5 hygiene fix).
+- HONEST_INPUTS=1 research flag: lag-1 ATR/regime (audit BUG-1
+  mitigation) — default proven byte-identical to certified (tsmom
+  IDENTICAL); honest oops india_wide = 7.92%/3.84%/1.08 vs lookahead
+  4.30%/0.88%/3.02; flag replicates LIVE M65 causal sequencing.
+- M70 src/ops/flow_telemetry.py — order-flow PROXY recorder (records
+  only, never trades): dVOL from cumulative counters signed by quote/
+  tick test, N-min proxy-delta buckets + day-max ledger (the honest
+  cousin of the reel's skeleton), L1 imbalance when depth exists,
+  JSONL out. Hooks: Mt5QuoteFeed + OpenAlgoQuoteFeed hand raw snapshots
+  over when .flow attached; run_paper FLOW_TELEMETRY=1 wires it.
+  11 new tests; suite 554 passed / 1 skipped.
+
+PRE-REGISTERED (not tradeable until adjudicated on recorded data):
+- H-GAP: closing-window signed flow -> overnight gap (NY Fed SR 917
+  grounding); needs months of recorded sessions.
+- H-EXEC: entry-time book imbalance -> adverse selection on our fills.
+- Tier-i daily backtests queued: Holmberg daily-OHLC ORB; size-
+  conditioned gap fade (demeaned); overnight/intraday on multi-year
+  futures-adjusted data. NOTE our 6m window shows overnight premium
+  NEGATIVE pooled (-2.98bp/day, bear window) vs +10.9bp/day on NIFTY
+  over 10y (agent probe) — window length matters; do NOT trade this
+  without the multi-year test.
+- Yahoo 1m NSE data is a rolling 30-day window: an archiver cron is the
+  cheapest way to own intraday history nobody can buy later (queued).

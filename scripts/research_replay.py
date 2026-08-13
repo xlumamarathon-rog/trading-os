@@ -82,6 +82,14 @@ DEFAULT_SIGMA = {"india": 0.016, "mt5_forex": 0.005, "mt5_crypto": 0.035}
 # stops/trails — this only stops adding risk during a losing cluster).
 GIVEBACK_PCT = float(os.environ.get("GIVEBACK_PCT", "0"))   # e.g. 0.02 = 2%
 
+# RESEARCH-ONLY honesty flag (Aug 2026 execution audit, BUG-1): with
+# HONEST_INPUTS=1 the ATR and regime that price the stop, size the order and
+# select the trail multiplier are computed from bars[:i] (lag-1) instead of
+# including the fill bar's own H/L/C. Default 0 keeps every certified result
+# byte-identical; NEW research replays must run with 1 so their numbers are
+# free of the documented lookahead. (docs/EXECUTION_AUDIT_AUG2026.md §7-1.)
+HONEST_INPUTS = bool(int(os.environ.get("HONEST_INPUTS", "0")))
+
 # RESEARCH-ONLY risk override (never touches production config): lets the lab
 # quantify what higher per-trade risk does to return AND drawdown.
 _risk_override = os.environ.get("RISK_PCT")
@@ -288,8 +296,10 @@ async def run():
             i = index_of[sym].get(date)
             if i is None or i < 21:
                 continue
-            bar, a = bars[i], atr14(bars, i)
-            regime = real_regime(bars, i)
+            bar = bars[i]
+            _j = i - 1 if HONEST_INPUTS else i     # audit BUG-1: lag-1 inputs
+            a = atr14(bars, _j)
+            regime = real_regime(bars, _j)
             broker.on_tick(sym, bar["open"])
 
             held = sym in exit_mgr.positions and exit_mgr.positions[sym].state != "EXITED"

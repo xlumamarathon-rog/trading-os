@@ -58,6 +58,10 @@ class _BaseLiveFeed:
                  candle_interval_s: int = 300, history: int = 96,
                  max_errors: int = 5) -> None:
         self.symbols = list(symbols)
+        # M70: optional FlowTelemetry recorder (records only, never trades).
+        # Feeds that receive bid/ask/volume in their payloads hand the raw
+        # snapshot over instead of discarding it. None = disabled.
+        self.flow = None
         self.market_clock = market_clock
         self.symbol_legs = symbol_legs or {}
         self.fallback = fallback
@@ -279,9 +283,19 @@ class Mt5QuoteFeed(_BaseLiveFeed):
         resp = await self._client.get(f"/tick/{symbol}")
         resp.raise_for_status()
         t = resp.json()
+        mid = (float(t["bid"]) + float(t["ask"])) / 2.0
+        if self.flow is not None:
+            # M70 flow proxy. HONESTY NOTE: for OTC spot FX the MT5 "volume"
+            # field counts quote updates, not traded contracts — recorded raw
+            # and labeled PROXY; only exchange-traded MT5 symbols carry real
+            # volume/aggressor data (docs/EXECUTION_AUDIT + orderflow ledger).
+            self.flow.on_snapshot(symbol, ts=time.time(),
+                                  ltp=float(t.get("last") or mid),
+                                  bid=float(t["bid"]), ask=float(t["ask"]),
+                                  cum_volume=t.get("volume"))
         # mid of the broker's real bid/ask — the exit engine marks with it;
         # the ROUTER's fills happen broker-side at the true touch anyway
-        return (float(t["bid"]) + float(t["ask"])) / 2.0
+        return mid
 
     async def _fetch_daily(self, symbol: str, n: int = 250) -> list:
         resp = await self._client.get(f"/candles/{symbol}",
@@ -333,9 +347,19 @@ class OpenAlgoQuoteFeed(_BaseLiveFeed):
             raise RuntimeError(f"openalgo multiquotes: {body.get('message')}")
         out = {}
         for row in body.get("results", []):
-            ltp = (row.get("data") or {}).get("ltp")
+            data = row.get("data") or {}
+            ltp = data.get("ltp")
             if ltp:
                 out[row["symbol"]] = float(ltp)
+                if self.flow is not None:
+                    # M70 flow proxy: NSE snapshots carry cumulative day
+                    # volume (TTQ) + best bid/ask — the exact inputs of the
+                    # 1-second order-flow PROXY (never a footprint: NSE
+                    # retail feeds have no trade tape by spec).
+                    self.flow.on_snapshot(
+                        row["symbol"], ts=time.time(), ltp=float(ltp),
+                        bid=data.get("bid"), ask=data.get("ask"),
+                        cum_volume=data.get("volume"))
         return out
 
     async def _fetch_last(self, symbol: str) -> Optional[float]:

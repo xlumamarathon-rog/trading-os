@@ -102,14 +102,25 @@ def fetch(yh: str, start: str, end: str) -> list[dict]:
     raw = json.loads(urllib.request.urlopen(req, timeout=30).read())
     res = raw["chart"]["result"][0]
     q = res["indicators"]["quote"][0]
+    vols = q.get("volume") or []
     bars = []
     for i, t in enumerate(res["timestamp"]):
         o, h, l, c = q["open"][i], q["high"][i], q["low"][i], q["close"][i]
         if None in (o, h, l, c) or min(o, h, l, c) <= 0:
             continue
-        bars.append({"date": dt.datetime.fromtimestamp(t, dt.timezone.utc).strftime("%Y-%m-%d"),
-                     "open": round(o, 6), "high": round(h, 6),
-                     "low": round(l, 6), "close": round(c, 6)})
+        bar = {"date": dt.datetime.fromtimestamp(t, dt.timezone.utc).strftime("%Y-%m-%d"),
+               "open": round(o, 6), "high": round(h, 6),
+               "low": round(l, 6), "close": round(c, 6)}
+        # Aug 2026 execution audit: Yahoo delivers volume; discarding it was
+        # pure information loss. Kept for HYGIENE (liquidity screens,
+        # stale-bar detection, eligibility gates) — the evidence review found
+        # no daily-bar directional alpha in volume, so no signal may consume
+        # it without its own pre-registered bar. Extra key is inert for the
+        # replay harness (bars are read by named key).
+        v = vols[i] if i < len(vols) else None
+        if v is not None and v > 0:
+            bar["volume"] = int(v)
+        bars.append(bar)
     return bars
 
 
