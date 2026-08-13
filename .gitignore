@@ -10,3 +10,5 @@ __pycache__/
 config/brokers_local.yaml
 # live/paper runtime state (audit, gate, sentinel) — never committed
 data/runtime/
+# intraday archive — runtime asset harvested daily by scripts/intraday_archiver.py, never a committed fixture
+data/intraday/

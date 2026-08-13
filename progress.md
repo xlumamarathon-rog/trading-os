@@ -815,3 +815,41 @@ PRE-REGISTERED (not tradeable until adjudicated on recorded data):
   without the multi-year test.
 - Yahoo 1m NSE data is a rolling 30-day window: an archiver cron is the
   cheapest way to own intraday history nobody can buy later (queued).
+
+---
+
+## 2026-08-13 (late night) — intraday archiver + MT5 history-depth probe
+
+The orderflow research's time-critical flag actioned: Yahoo serves NSE
+1m bars only inside a ROLLING ~30-day window (verified live) — every
+unharvested session is intraday history no retail tier can buy back.
+
+- **scripts/intraday_archiver.py** (cron-able, stdlib-only): chunked
+  harvest of 1m (last 29d, <=7d chunks) + 5m/15m (59d windows) for the
+  15-name india_wide universe + ^NSEI. Dedup-safe merge by epoch ts
+  (fresher bar wins), atomic tmp+rename writes, per-symbol coverage
+  manifest (bars/sessions/median-bars-per-session), window-level
+  fail-soft, cron exit codes (0 clean / 1 partial / 2 dead).
+- **First harvest 2026-08-13: 48/48 ok, 0 failed** — ~124k 1m bars
+  (21 sessions, the full rescuable window: 2026-07-16 -> today's close)
+  + 42 sessions of 5m/15m, 11MB. 99.7% of stock 1m bars carry real
+  volume. data/intraday/ is GITIGNORED runtime state; from tomorrow a
+  daily cron extends coverage indefinitely.
+- **MT5 history depth**: SERIES_SERVER_FIRSTDATE is MQL5-only (not in
+  the Python API) — honest equivalent shipped: bisection over
+  copy_rates_range / copy_ticks_range per calendar day.
+  mt5_service/history_probe.py (pure, sync+async twins, tested),
+  Mt5Aiomql.history_depth (verified against vendor meta_trader.py
+  :446/:497), bridge GET /history_depth/{symbol} (auth-gated, 503 when
+  terminal down, ~28 copy calls — first run slow while the terminal
+  syncs tick months: expected), scripts/probe_mt5_history.py writes
+  data/runtime/mt5_history_coverage.json + coverage table. NOT yet run
+  live (bridge is on the Windows VPS) — runbook: set MT5_SERVICE_TOKEN,
+  run once, and the forex intraday backtest window we OWN is measured,
+  not assumed.
+- 17 new tests (chunking walls, dedup/resume, atomic io, manifest,
+  bisection boundary + async twin, endpoint auth/503, probe client).
+  Suite: 571 passed / 1 skipped. Certified paths untouched.
+
+Cron line (VPS, after NSE close):
+  45 10 * * 1-5 cd /path/to/trading-os && python3 scripts/intraday_archiver.py >> data/runtime/archiver.log 2>&1

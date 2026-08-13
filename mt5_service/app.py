@@ -111,4 +111,16 @@ def create_mt5_service(mt5, *, auth_token: Optional[str] = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return rows
 
+    # ---- history depth (Aug 2026): earliest M1 bar / earliest real tick the
+    # broker's server will serve for a symbol (bisection; ~28 copy_* calls —
+    # SLOW on first run while the terminal syncs tick months from the server;
+    # that is expected, not a hang). Gate for MT5 intraday backtests: measure
+    # the window we own, never assume it. Auth-gated like everything else.
+
+    @app.get("/history_depth/{symbol}")
+    async def history_depth(symbol: str, _: None = Depends(require_auth)):
+        if not await mt5.is_connected():
+            raise HTTPException(status_code=503, detail="mt5 terminal disconnected")
+        return await mt5.history_depth(symbol)
+
     return app

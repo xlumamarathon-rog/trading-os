@@ -115,3 +115,44 @@ class Mt5Aiomql:
         # ndarray columns: time, open, high, low, close, tick_volume, ...
         return [{"ts": int(r[0]), "o": float(r[1]), "h": float(r[2]),
                  "l": float(r[3]), "c": float(r[4])} for r in rates]
+
+    # ---- history depth (Aug 2026): how far back does THIS broker's server
+    # actually serve M1 bars and real ticks? SeriesInfoInteger is MQL5-only,
+    # so we bisect copy_rates_range / copy_ticks_range per calendar day
+    # (mt5_service/history_probe.py — pure, tested off-Windows). Verified
+    # against vendor source: core/meta_trader.py copy_rates_range (:446) and
+    # copy_ticks_range (:497). COPY_TICKS_INFO==1 (bid/ask changes).
+
+    async def history_depth(self, symbol: str) -> dict:
+        import datetime as _dt
+
+        from mt5_service.history_probe import (day_bounds_epoch,
+                                               earliest_available_async)
+        await self._ensure()
+        from aiomql import TimeFrame  # type: ignore
+        meta = self._meta()
+
+        async def m1_has(day):
+            p1, p2 = day_bounds_epoch(day)
+            rates = await meta.copy_rates_range(
+                symbol, int(TimeFrame.M1),
+                _dt.datetime.fromtimestamp(p1, _dt.timezone.utc),
+                _dt.datetime.fromtimestamp(p2, _dt.timezone.utc))
+            return rates is not None and len(rates) > 0
+
+        async def tick_has(day):
+            p1, p2 = day_bounds_epoch(day)
+            ticks = await meta.copy_ticks_range(
+                symbol,
+                _dt.datetime.fromtimestamp(p1, _dt.timezone.utc),
+                _dt.datetime.fromtimestamp(p2, _dt.timezone.utc),
+                1)                                   # COPY_TICKS_INFO
+            return ticks is not None and len(ticks) > 0
+
+        m1_first = await earliest_available_async(m1_has)
+        tick_first = await earliest_available_async(tick_has)
+        return {"symbol": symbol,
+                "m1_first_date": m1_first.isoformat() if m1_first else None,
+                "tick_first_date": tick_first.isoformat() if tick_first else None,
+                "probed_at": _dt.datetime.now(_dt.timezone.utc)
+                .isoformat(timespec="seconds")}
