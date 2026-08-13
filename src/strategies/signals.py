@@ -265,12 +265,159 @@ def sig_gsv(bars, i, regime):
     return None
 
 
+# ---------------------------------------------------------------------------
+# World-best research candidates (research/worldbest-aug2026, 2026-08-13).
+# Sources: Connors & Alvarez "Short Term Trading Strategies That Work" (2008)
+# + "High Probability ETF Trading" (2009) with post-publication replications;
+# Pagonidis "The IBS Effect" (NAAIM 2014); McConnell & Xu TOM (FAJ 2008) +
+# India studies (Maher & Parikh 2013). Full provenance in the ledger.
+# HONEST ADAPTATIONS (all documented, all disclosed):
+#   - Connors enters/exits ON THE CLOSE with no stops; this engine enters at
+#     next OPEN and exits via the certified ExitManager (stops/partials/
+#     trails/time). Published 70-88% win rates are an artifact of the
+#     hold-until-recovery exit — expect materially different numbers here.
+#     The question under test: do these ENTRY rules add edge in OUR system.
+#   - The published 200-day MA regime filter cannot exist on a 6-month
+#     dataset (about 65 warmup bars) -> SMA(50) stands in for it.
+#   - Connors' RSI is WILDER-smoothed (not the engine's Cutler rsi()) —
+#     implemented faithfully below.
+
+
+def wilder_rsi(bars, i, n=2) -> Optional[float]:
+    """Wilder-smoothed RSI of closes over bars[:i] (last completed bar)."""
+    lo = max(0, i - n - 60)                    # 60 extra bars to converge
+    closes = [b["close"] for b in bars[lo:i]]
+    if len(closes) < n + 2:
+        return None
+    gains, losses = [], []
+    for k in range(1, len(closes)):
+        d = closes[k] - closes[k - 1]
+        gains.append(max(d, 0.0))
+        losses.append(max(-d, 0.0))
+    ag, al = sum(gains[:n]) / n, sum(losses[:n]) / n
+    for k in range(n, len(gains)):
+        ag = (ag * (n - 1) + gains[k]) / n
+        al = (al * (n - 1) + losses[k]) / n
+    if al == 0:
+        return 100.0
+    return 100.0 - 100.0 / (1.0 + ag / al)
+
+
+def sig_rsi2c(bars, i, regime):
+    """Connors RSI(2)<10 pullback (STSTW ch.9; published 83.6% win on SPX
+    1995-2007 with close entry/exit). Long above the regime MA; the book's
+    mirror short below it (RSI2>90)."""
+    if i < 55:
+        return None
+    s = sma(bars, i, 50)
+    r = wilder_rsi(bars, i, 2)
+    if s is None or r is None:
+        return None
+    c = bars[i - 1]["close"]
+    if c > s and r < 10:
+        return "buy"
+    if c < s and r > 90:
+        return "sell"
+    return None
+
+
+def sig_dbl7(bars, i, regime):
+    """Connors Double 7s (STSTW ch.10; published 80.4% win on SPY): above
+    the regime MA, buy when yesterday closed at a 7-day closing low
+    (Method 1 per Alvarez: inclusive). Long only, as published."""
+    if i < 55:
+        return None
+    s = sma(bars, i, 50)
+    if s is None:
+        return None
+    c = bars[i - 1]["close"]
+    if c > s and c <= min(b["close"] for b in bars[i - 7:i]):
+        return "buy"
+    return None
+
+
+def sig_crsi(bars, i, regime):
+    """Connors Cumulative RSI (STSTW ch.9; X=2 Y=35 published 88% win on
+    SPY): above regime MA, buy when RSI(2) summed over the last 2
+    completed bars is under 35."""
+    if i < 56:
+        return None
+    s = sma(bars, i, 50)
+    r1 = wilder_rsi(bars, i, 2)
+    r2 = wilder_rsi(bars, i - 1, 2)
+    if s is None or r1 is None or r2 is None:
+        return None
+    if bars[i - 1]["close"] > s and (r1 + r2) < 35:
+        return "buy"
+    return None
+
+
+def sig_rsi4x(bars, i, regime):
+    """Connors RSI 25/75 (High Probability ETF Trading; published 79.5%
+    win long): RSI(4)<25 above the regime MA; mirror short RSI(4)>75
+    below it."""
+    if i < 55:
+        return None
+    s = sma(bars, i, 50)
+    r = wilder_rsi(bars, i, 4)
+    if s is None or r is None:
+        return None
+    c = bars[i - 1]["close"]
+    if c > s and r < 25:
+        return "buy"
+    if c < s and r > 75:
+        return "sell"
+    return None
+
+
+def sig_ibs(bars, i, regime):
+    """Internal Bar Strength (Pagonidis, NAAIM 2014; published 56-60%
+    next-day up probability on equity ETFs, close entry): IBS =
+    (C-L)/(H-L) of the last completed bar. Buy washouts (<0.2), sell
+    blowoffs (>0.8). As published: no MA filter. Known caveats inherited:
+    ~25% open-entry haircut, US-equity-centric evidence."""
+    if i < 2:
+        return None
+    b = bars[i - 1]
+    rng = b["high"] - b["low"]
+    if rng <= 0:
+        return None
+    ibs = (b["close"] - b["low"]) / rng
+    if ibs < 0.2:
+        return "buy"
+    if ibs > 0.8:
+        return "sell"
+    return None
+
+
+def sig_tom(bars, i, regime):
+    """Turn-of-month (McConnell & Xu FAJ 2008; 31 of 35 countries incl.
+    India per Maher & Parikh 2013): institutional month-end flows. Buy in
+    the entry window approximated by calendar day >= 25 of the month
+    (published: 5th-last trading day close; our engine enters next open).
+    Long only; the certified exits handle the rest."""
+    if i < 2:
+        return None
+    date = str(bars[i - 1].get("date", ""))
+    if len(date) < 10:
+        return None
+    try:
+        dom = int(date[8:10])
+    except ValueError:
+        return None
+    if dom >= 25:
+        return "buy"
+    return None
+
+
 SIGNALS: dict[str, Callable] = {
     "baseline": sig_baseline, "tsmom": sig_tsmom, "tsmom_f": sig_tsmom_f,
     "donchian": sig_donchian, "rsi2": sig_rsi2, "improved": sig_improved,
     "improved2": sig_improved2, "improved3": sig_improved3,
     "accurate": sig_accurate, "accurate_ls": sig_accurate_ls,
     "vbo": sig_vbo, "oops": sig_oops, "gsv": sig_gsv,
+    "rsi2c": sig_rsi2c, "dbl7": sig_dbl7, "crsi": sig_crsi,
+    "rsi4x": sig_rsi4x, "ibs": sig_ibs, "tom": sig_tom,
 }
 
 

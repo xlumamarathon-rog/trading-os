@@ -581,3 +581,42 @@ these results would be in-sample selection — per-pair inclusion must be
 blessed by walk-forward on multi-year data, not by this 6-month look.
 Until then the honest challenge book is the pairs where the edge was
 originally validated (EURUSD/GBPUSD/USDJPY + crypto), sized at 2%.
+
+---
+
+## 2026-08-13 — world-best strategy campaign: 25 candidates, 175 replays, ZERO passes (branch research/worldbest-aug2026)
+
+Deep-research campaign for documented high-win-rate systems, tested
+against a PRE-REGISTERED bar (win>=55% & n>=30 pooled across the 3
+primary 6m markets & returnsum>0 & CLEAN & no stress blowup).
+
+Research (3 parallel agents, full provenance in-thread): the credible
+canon is Connors/Alvarez (RSI2 83.6%, Double7s 80.4%, cumRSI 88%,
+RSI25/75 79.5% — published win rates, replicated 65-77% post-pub with
+decaying per-trade edge), IBS (Pagonidis NAAIM 2014, 56-60%, US-centric,
+close-entry), TOM (McConnell&Xu FAJ 2008; India: Maher&Parikh 2013).
+FX: NOT ONE daily system in the public record meets exact-rules +
+credible >55% + replication. Crypto: nothing.
+
+Implemented 6 candidates (rsi2c, dbl7, crsi, rsi4x, ibs, tom) with
+disclosed adaptations (Wilder RSI faithful; SMA50 for the impossible
+200MA; next-open entry ~25% haircut; OUR stop-based exits vs their
+hold-until-recovery — the known win-rate killer). 19 signal tests incl.
+hard no-lookahead.
+
+Results: Phase 0 (13 existing sleeves): best = tsmom 51.8%/+4.56%
+pooled; NO pass. Round 1 (standard exits): best dbl7 52.2%/n=23; ibs
+35.5%/-4.04% (the US-centric + open-entry warnings were correct); NO
+pass. Round 2 (exits aligned to the PUBLISHED 3-4 day hold — principled,
+not mined): crsi 57.1%/+0.40% but n=21 < 30 floor; dbl7 51.5%/n=33;
+NO pass. Stopped per pre-commitment: 25 configurations is enough
+multiplicity that further rolls would manufacture a fluke, not find an
+edge. tsmom certified results IDENTICAL throughout; 539 tests green.
+
+Verdicts recorded: (1) the legends' win rates are exit-style artifacts —
+no-stop hold-until-recovery — incompatible by design with this system's
+loss-capping; (2) the user's dual goal IS met single-market by tsmom
+india (57.9% win, +1.15%); (3) the honest unlock for a pooled 55% is
+multi-year data + walk-forward (would also adjudicate crsi's suggestive
+21-trade 57%). Candidates remain on the research branch: registered,
+disabled, unpromoted.
