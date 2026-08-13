@@ -853,3 +853,90 @@ unharvested session is intraday history no retail tier can buy back.
 
 Cron line (VPS, after NSE close):
   45 10 * * 1-5 cd /path/to/trading-os && python3 scripts/intraday_archiver.py >> data/runtime/archiver.log 2>&1
+
+---
+
+## 2026-08-13 (later) — PRE-REGISTRATION: daily-OHLC ORB (Holmberg) + size-conditioned gap fade (configs #29–32)
+
+Committed BEFORE the study script produces a single number.
+
+**Study A — Holmberg-Lönnbark-Lundström daily-OHLC ORB** (FRL 2013: the
+published ORB method needing only daily bars; their own caveat — the
+crude-oil result was driven by the most volatile sub-period — is the
+null we try to break):
+- Rules (frozen): threshold psi = open_i × (1 ± z·sigma) where sigma =
+  trailing 20-day std of ln close-to-close returns computed STRICTLY
+  from bars[:i] (causal — the HONEST_INPUTS principle applied to a
+  study). High_i >= psi_up -> long filled AT psi_up; low_i <= psi_dn ->
+  short AT psi_dn; exit same day's close; no stop. Days where BOTH
+  thresholds breach are SKIPPED and counted (daily OHLC cannot order
+  them — conservative).
+- Costs (stricter than the paper, which assumed zero): full India
+  intraday schedule from config at our ACTUAL capped notional ₹50k
+  (sensitivity ₹5L); MT5 legs pay 2×half_spread + 2×commission from
+  symbols.json.
+- Datasets: committed india_wide_6m + forex_6m + forex_wide_6m +
+  crypto_6m, report window 2026-02-05+.
+- **Config #29 (adjudicated): z=1.0 pooled all legs, NET of costs.**
+  Bar: win >=55% AND n >=30 AND pooled net return sum > 0 AND
+  bootstrap 95% CI (2000 resamples, seeded) on mean net per-trade
+  return excludes zero. Configs #30/#31 = z=0.5 / z=1.5 sensitivity —
+  DISCLOSED, not adjudicated, counted toward multiplicity.
+
+**Study B — size-conditioned gap fade, demeaned (config #32):**
+- gap_i = open_i/close_{i-1} − 1; intraday_i = close_i/open_i − 1;
+  per-symbol DEMEANED intraday (subtract each symbol's unconditional
+  window mean — else we just measure the bear-window drift). Signed-gap
+  quintiles pooled across the 15 india_wide names. Fade strategy =
+  short intraday on Q5 (big gap up), long on Q1 (big gap down).
+- **Bar: pooled Q1+Q5 fade net (after ₹50k-notional intraday costs)
+  mean > 0 with seeded bootstrap 95% CI excluding zero, n >= 30.**
+- Prerequisite check: extreme-gap scan for corporate-action artifacts
+  (unadjusted ex-dates masquerade as gaps) — reported before results.
+
+Campaign multiplicity rises 28 -> 32. Both studies are ANALYSIS-ONLY
+(intrabar fills at psi are outside the engine contract); no sleeve, no
+promotion — a pass earns an engine-grade implementation proposal, not
+a live switch. Script committed for reproducibility; seeded RNG.
+
+---
+
+## 2026-08-13 (later) — RESULTS: configs #29–32 — both studies FAIL; the z=0.5 tease dies inside the data's own ambiguity band
+
+Script: scripts/study_daily_orb_gap.py (committed, seeded, 9 tests).
+Data-integrity precheck: 8 gaps >5%, all clustered on market-wide
+volatile dates (2026-02-13, 2026-04-08...) — genuine moves, no
+corporate-action artifacts.
+
+**#29 Holmberg daily-OHLC ORB z=1.0 (ADJUDICATED): FAIL.**
+n=1,498 pooled all legs, win 30.9%, mean net −11.38bp,
+CI95 [−16.94, −5.75] — significantly NEGATIVE after real costs
+(india @ ₹50k actual cap = 14.3bp round trip). z=1.5 worse
+(−22.9bp). Notional sensitivity (₹5L): still −6.6bp.
+
+**#30 sensitivity z=0.5 (disclosed, not adjudicated): the honest
+kill.** Raw: +12.61bp, CI [8.42,16.95], n=2,439 — looks alive. BUT
+547 both-breach days were skipped (daily OHLC cannot order the
+breaches), and the skip is optimistic. PESSIMISTIC BOUND (each
+skipped day assigned the WORSE of its two possible outcomes):
+−16.80bp, CI [−21.54, −11.87]. Truth ∈ [−16.8, +12.6]bp — the
+apparent edge is SMALLER than the daily-bar ambiguity band. Verdict:
+unknowable from daily bars, win% (37.4) fails the bar regardless.
+NOTE: the 1m archive (started today) is exactly the instrument that
+resolves both-breach ordering — re-run this in ~6-12 months on
+archived intraday bars and the ambiguity vanishes.
+
+**#32 gap fade demeaned (ADJUDICATED): FAIL — and the sign is
+backwards.** Demeaned quintiles show gap MOMENTUM, not fade: Q1 (big
+gap down, mean −135bp) continues −10.3bp intraday; Q5 (+119bp)
+continues +5.0bp. Fade Q1+Q5: gross −7.6bp, net −21.88bp, CI
+[−32.9, −10.96], win 45.6%. The earlier single-name HDFCBANK fade
+pattern did not survive 15-name pooling + demeaning. Gap-FOLLOW is
+also dead: +7.6bp gross < 14.3bp cost.
+
+Campaign: 32 configs, still ZERO passes of the pre-registered bar.
+Standing insight strengthened: at NSE retail cost structure (flat
+₹20 brokerage on ₹50k capped notionals = the dominant term), no
+sub-15bp/day daily-bar edge can survive — edges must be multi-day
+(hold longer, pay once) or the sizing cap must change first. This is
+the same conclusion the execution audit reached from the cost side.
