@@ -686,3 +686,64 @@ tsmom selection as a question, not an assumption).
 
 Verification: 539 passed / 1 skipped; UI harness 85/85; tsmom
 certified IDENTICAL; data/ restored after every replay batch.
+
+---
+
+## 2026-08-13 (evening) — EXECUTION FORENSICS AUDIT: 7 confirmed engine defects; entries proven clean; the gap is trade management + telemetry, not trendlines/volume/candles
+
+Full report: docs/EXECUTION_AUDIT_AUG2026.md. Method: observer-only
+instrumented re-run proven BIT-IDENTICAL to certified artifacts, per-trade
+traces vs raw bars, counterfactual replays, 3 parallel evidence reviews
+(MR canon, TF canon, volume/candles/trendlines literature).
+
+CLEAN (proven): all 19 signals lookahead-free (49,400 guarded calls, 0
+violations); fill indexing (decision bars[:i], fill bars[i].open); stop
+side/distance 344/344; broker cash pessimistic (gap fills at gapped open,
+adverse slippage, exact qty conservation). Reconciliation CLEAN is real.
+
+BUGS (ranked): (1) atr14(bars,i)/real_regime(bars,i) include fill bar's
+own H/L/C -> stop, sizing R denominator, pos.atr, SHOCK trail all carry
+lookahead; oops india_wide Sharpe 3.02->1.04, MDD 0.88%->3.84% when
+lagged honestly (+11.89R of +26.71R from unreachable SHOCK levels);
+regime-reading sleeves (tsmom_f/donchian/improved*/accurate*) have it in
+the ENTRY. (2) time-stop counts caller sub-bars (4/day in replays,
+TICKS in run_paper) -> config "20 bars" = 5 days; crsi override "5" =
+1.25 days; drives 53/58/95% of exits. (3) telemetry books stop exits at
+stop price vs broker's gapped fill: +0.10R/stop-exit optimism. (4)
+trades_r != P&L: oops +26.7R tape vs +13.95R cash; tsmom +4.9R vs -8.66R
+(SIGN FLIP); 13 cash-winners recorded 0.000R as losses; M66 Kelly + M69
+challenge math consumed this tape -> re-derive after fix. (5) partials
+fill at sub-bar close, never worse than trigger (+4.05R free). (6)
+synthetic path favourable-first on adverse-close bars (45:6 on stop-out
+days). (7) mfe_captured_pct unbounded (-36,728% observed), 0.0
+triple-meaning.
+
+CANON GAPS: our 0.75-1.25xATR regime trails = Connors' documented 1-3%
+kill zone (NSE replication: no-stop 71.3% win -> 1% stop 23.5%) — our
+30-42% MR win rates match the predicted band; "5-bar hold" was a misread
+of an n=49 SPX stat (stock-universe mean hold 7.74 bars); TF: no
+signal-reversal exit (0/188; canon's #1 exit), partials cap tail at 34%
+(<7% of trades = ALL trend profit), 5% notional cap bound 382/382 fills
+(Carver: same mechanism turns 15% target into 3%). Fix sequence: exits
+-> partials -> sizing.
+
+COUNTERFACTUAL (our entries + published exits, no costs, analysis-only):
+oops+Williams bailout = 94.3% win but +12.2R w/ -5.8R MAE tails vs
+engine cash +13.95R w/ capped tails — win rate is an exit-style choice;
+crsi loses under BOTH exit styles (kill confirmed).
+
+USER'S SUSPECTS ADJUDICATED: volume->direction LORE (468-estimate
+meta-analysis: negligible after publication-bias correction; keep volume
+for hygiene only — fetcher currently discards it); candlesticks LORE on
+strongest tests; trendlines dominated by MAs we already run. Evidence
+DOES support: 52wk-high proximity, vol-regime gating of MR, overnight/
+intraday split (test on NSE), exit redesign.
+
+Numbers superseded/tainted: oops Sharpe/MDD headline; all trades_r-based
+win/avgR tables (cash win rates differ -1.4..+3.7pp); M66/M69 outputs.
+Equity/return/reconciliation/stress conclusions stand (cash-basis).
+
+Five pre-registered fix experiments proposed (docs §7): FIX-LOOKAHEAD,
+FIX-TIMESTOP-UNIT, FIX-TELEMETRY (trades_r_cash), EXIT-STYLE per-style
+profiles, SIZING vol-target. None run yet; each changes certified
+numbers BY DESIGN and requires explicit re-baselining + suite green.
