@@ -18,6 +18,7 @@
     <a class="nav-item" id="nav-markets" href="#/markets">◔ Markets</a>
     <a class="nav-item" id="nav-strategies" href="#/strategies">λ Strategies</a>
     <a class="nav-item" id="nav-research" href="#/research">◎ Research</a>
+    <a class="nav-item" id="nav-funded" href="#/funded">◈ Funded</a>
     <a class="nav-item" id="nav-ops" href="#/ops">⚙ Operations</a>
     <a class="nav-item" id="nav-settings" href="#/settings">⛭ Settings</a>
   </nav>
@@ -268,6 +269,41 @@
         It never does exactly — which is why the engine caps at half-Kelly
         and the config risks a fraction of that. This panel is evidence for
         the sizing debate, not an instruction to lever up.</div>
+    </div>
+  </section>
+
+  <!-- ==================== FUNDED ACCOUNT (MODULE 69) ==================== -->
+  <section class="page hidden" id="page-funded">
+    <div class="cards">
+      <div class="card"><h3>Exam state</h3><div id="fu-state" class="big">—</div>
+        <div id="fu-substate" class="sub"></div></div>
+      <div class="card"><h3>Daily loss budget</h3>
+        <div class="gauge"><div id="fu-daily-fill" class="gauge-fill"></div></div>
+        <div id="fu-daily-label" class="sub">—</div></div>
+      <div class="card"><h3>Max drawdown budget</h3>
+        <div class="gauge"><div id="fu-dd-fill" class="gauge-fill"></div></div>
+        <div id="fu-dd-label" class="sub">—</div></div>
+      <div class="card"><h3>Profit target</h3>
+        <div class="gauge"><div id="fu-target-fill" class="gauge-fill"></div></div>
+        <div id="fu-target-label" class="sub">—</div></div>
+      <div class="card"><h3>Trading days</h3><div id="fu-days" class="big">—</div>
+        <div class="sub">distinct firm days with fills</div></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Firm rulebook <span class="sub">· our soft line refuses entries at 60%
+          of each budget — the firm's hard line is never the first line</span></h3>
+        <div id="fu-rules" class="broker-card">—</div>
+      </div>
+      <div class="card">
+        <h3>Challenge math <span class="sub">· Monte Carlo of YOUR trade
+          distribution through the firm's rules — the pass-optimal risk is a
+          number, not a feeling</span></h3>
+        <table id="fu-math"><thead><tr>
+          <th>risk/trade</th><th>P(pass)</th><th>P(bust)</th><th>median days</th>
+        </tr></thead><tbody></tbody></table>
+        <div id="fu-note" class="sub mt"></div>
+      </div>
     </div>
   </section>
 

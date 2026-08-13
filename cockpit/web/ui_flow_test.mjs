@@ -375,6 +375,29 @@ check("risk math shows drawdown contrast (7% vs 90.8% P95)",
       $id("riskmath").innerHTML.includes("7%") &&
       $id("riskmath").innerHTML.includes("90.8%"));
 
+/* ================= MODULE 69: funded account page ================= */
+
+await new Promise((r) => setTimeout(r, 10));
+check("funded: exam state renders", $id("fu-state").textContent === "IN PROGRESS");
+check("funded: daily gauge shows used vs firm cap",
+      $id("fu-daily-label").textContent.includes("1.2% of 5% cap") &&
+      $id("fu-daily-fill").style.width !== "");
+check("funded: drawdown gauge shows used vs firm cap",
+      $id("fu-dd-label").textContent.includes("3.4% of 10% cap"));
+check("funded: target progress bar at 38%",
+      $id("fu-target-fill").style.width === "38%" &&
+      $id("fu-target-label").textContent.includes("+10% target"));
+check("funded: traded-days counter", $id("fu-days").textContent === "6/4");
+check("funded: rulebook renders firm-day reset hour",
+      $id("fu-rules").innerHTML.includes("21:00 UTC"));
+const fuRows = $id("fu-math").querySelector("tbody").innerHTML;
+check("funded: challenge table renders the curve",
+      (fuRows.match(/<tr/g) || []).length === 7 && fuRows.includes("72.6%"));
+check("funded: pass-optimal row is starred",
+      fuRows.includes("3.0% ★") && fuRows.includes("fu-best"));
+check("funded: note names the optimal risk",
+      $id("fu-note").textContent.includes("3.0%"));
+
 // ---- kill UX source invariants ----
 check("kill flow requires no typed phrase (modal + arm)",
       !appJs.includes('kill-phrase') && appJs.includes("armButton($(\"kill-go\"))"));

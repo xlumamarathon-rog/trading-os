@@ -51,7 +51,7 @@ const state = { token: storage.getItem("cockpit_token") || "", role: null,
  * The ui_flow_test DOM shim has no location.hash and no addEventListener —
  * both must degrade: undefined hash -> dashboard; no listener -> static page. */
 const PAGES = ["dashboard", "portfolio", "pnl", "history", "markets",
-               "strategies", "research", "ops", "settings"];
+               "strategies", "research", "funded", "ops", "settings"];
 
 function currentPage() {
   const h = (typeof location !== "undefined" && typeof location.hash === "string")
@@ -318,6 +318,29 @@ function demoApi(path, opts) {
     }
     s.enabled = !!body.enabled;
     return Promise.resolve({ sleeve: s.name, enabled: s.enabled });
+  }
+  if (path === "/prop") {
+    return Promise.resolve({
+      enabled: true,
+      rules: { initial_balance: 10000, max_daily_loss_pct: 0.05,
+               max_total_dd_pct: 0.10, trailing_dd: false,
+               profit_target_pct: 0.10, min_trading_days: 4,
+               soft_fraction: 0.60, day_reset_utc_hour: 21 },
+      status: { breached: "", daily_used_pct: 1.2, daily_budget_left: 380.0,
+                daily_soft_stop: false, total_used_pct: 3.4,
+                total_budget_left: 660.0, total_soft_stop: false,
+                profit_target_equity: 11000, target_progress_pct: 38.0,
+                traded_days: 6, min_trading_days: 4, target_reached: false },
+      challenge_math: { curve: [
+        { risk_pct: 0.005, p_pass: 0.003, p_bust: 0.000, median_days: 56 },
+        { risk_pct: 0.01, p_pass: 0.218, p_bust: 0.000, median_days: 45 },
+        { risk_pct: 0.015, p_pass: 0.477, p_bust: 0.020, median_days: 37 },
+        { risk_pct: 0.02, p_pass: 0.618, p_bust: 0.059, median_days: 29 },
+        { risk_pct: 0.03, p_pass: 0.726, p_bust: 0.157, median_days: 21 },
+        { risk_pct: 0.04, p_pass: 0.722, p_bust: 0.252, median_days: 14 },
+        { risk_pct: 0.06, p_pass: 0.496, p_bust: 0.504, median_days: 6 },
+      ], best: { risk_pct: 0.03, p_pass: 0.726, p_bust: 0.157, median_days: 21 } },
+    });
   }
   if (path.startsWith("/riskmath")) {
     // real numbers from the tsmom/india_6m certified replay (38 trades)
@@ -665,6 +688,76 @@ async function confirmSleeveEnable() {
     ? (r.error === "forbidden" ? "✗ operator token required" : `✗ ${r.error}`)
     : `✓ ${sleeve} is LIVE — it now trades on its own signals`;
   renderStrategies();
+}
+
+/* ---------------- funded account (MODULE 69) ---------------- */
+
+function propGauge(fillId, labelId, usedPct, budgetLeft, softStop, capPct) {
+  // usedPct is % of EQUITY consumed; capPct is the firm's cap (e.g. 5)
+  const frac = Math.min(100, (usedPct / capPct) * 100);
+  const fill = $(fillId);
+  fill.style.width = frac + "%";
+  fill.style.background = softStop ? "var(--red)"
+    : frac < 60 ? "var(--green)" : "var(--amber)";
+  $(labelId).textContent = `${usedPct.toFixed(1)}% of ${capPct}% cap used` +
+    (budgetLeft != null ? ` · ${budgetLeft.toFixed(0)} left` : "") +
+    (softStop ? " · SOFT-STOPPED" : "");
+}
+
+async function renderFunded() {
+  const p = await api("/prop").catch(() => null);
+  if (!p || !p.enabled) {
+    $("fu-state").textContent = "OFF";
+    $("fu-substate").textContent = (p && p.note) ||
+      "enable prop_firm in config/master.yaml (or PROP=1)";
+    return;
+  }
+  const s = p.status || {}, r = p.rules || {};
+  $("fu-state").textContent = s.breached ? "FAILED" :
+    (s.target_reached && s.traded_days >= s.min_trading_days) ? "PASSED"
+    : "IN PROGRESS";
+  $("fu-state").className = "big " + (s.breached ? "neg" :
+    (s.target_reached ? "pos" : "warn"));
+  $("fu-substate").textContent = s.breached ? esc(s.breached)
+    : (s.daily_soft_stop || s.total_soft_stop) ? "entries soft-stopped by the guard"
+    : "all budgets inside the soft line";
+
+  propGauge("fu-daily-fill", "fu-daily-label", s.daily_used_pct ?? 0,
+            s.daily_budget_left, !!s.daily_soft_stop,
+            (r.max_daily_loss_pct ?? 0.05) * 100);
+  propGauge("fu-dd-fill", "fu-dd-label", s.total_used_pct ?? 0,
+            s.total_budget_left, !!s.total_soft_stop,
+            (r.max_total_dd_pct ?? 0.10) * 100);
+
+  const tp = Math.max(0, Math.min(100, s.target_progress_pct ?? 0));
+  $("fu-target-fill").style.width = tp + "%";
+  $("fu-target-fill").style.background = "var(--accent)";
+  $("fu-target-label").textContent =
+    `${tp.toFixed(0)}% of +${((r.profit_target_pct ?? 0.1) * 100).toFixed(0)}% target` +
+    ` · pass at ${esc(s.profit_target_equity ?? "—")}`;
+  $("fu-days").textContent = `${s.traded_days ?? 0}/${s.min_trading_days ?? 0}`;
+
+  $("fu-rules").innerHTML = [
+    ["account", r.initial_balance], ["max daily loss", (r.max_daily_loss_pct * 100) + "%"],
+    ["max drawdown", (r.max_total_dd_pct * 100) + "%" + (r.trailing_dd ? " (trailing)" : " (static)")],
+    ["profit target", "+" + (r.profit_target_pct * 100) + "%"],
+    ["min trading days", r.min_trading_days],
+    ["our soft line", (r.soft_fraction * 100) + "% of each budget"],
+    ["firm day resets", (r.day_reset_utc_hour ?? 21) + ":00 UTC"],
+  ].map(([k, v]) => `<div class="kv"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join("");
+
+  const math = p.challenge_math;
+  $("fu-math").querySelector("tbody").innerHTML = (math && math.curve || []).map(c => {
+    const best = math.best && c.risk_pct === math.best.risk_pct;
+    return `<tr${best ? ' class="fu-best"' : ""}><td>${(c.risk_pct * 100).toFixed(1)}%${best ? " ★" : ""}</td>
+      <td class="${c.p_pass >= 0.6 ? "pos" : ""}">${(c.p_pass * 100).toFixed(1)}%</td>
+      <td class="${c.p_bust >= 0.3 ? "neg" : ""}">${(c.p_bust * 100).toFixed(1)}%</td>
+      <td>${esc(c.median_days ?? "—")}</td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="sub">${esc((p.challenge_note) || "no math yet")}</td></tr>`;
+  $("fu-note").textContent = math && math.best
+    ? `★ pass-optimal risk ${(math.best.risk_pct * 100).toFixed(1)}%/trade — ` +
+      `challenge aggression is a number; after funding, drop back to normal risk`
+    : "";
 }
 
 /* ---------------- research lab (v2.1) ---------------- */
@@ -1143,6 +1236,8 @@ async function boot() {
   renderAnalysis();
   renderResearch();
   renderRiskMath();
+  renderFunded();
+  setInterval(renderFunded, POLL_MS * 5);
   renderStrategies();
   setInterval(renderStrategies, POLL_MS * 3);
   setInterval(renderResearch, POLL_MS * 8);

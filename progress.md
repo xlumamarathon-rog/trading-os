@@ -536,3 +536,16 @@ real math.
 - Tests: 520 passed / 1 skipped (+14: firm-day rolls, soft-before-hard,
   breach latching, trailing vs static DD, MC determinism + interior
   peak, negative-edge-cannot-pass, guard-stack integration).
+
+---
+
+## 2026-08-13 — Funded Account cockpit page (M69 UI)
+
+The prop-firm mode gets its own page (#/funded, nav "Funded"): exam state
+(IN PROGRESS / PASSED / FAILED with breach reason), live gauges for the
+daily-loss and max-DD budgets (used% vs firm cap, red at soft-stop),
+profit-target progress bar with the pass equity, traded-days counter vs
+minimum, the firm rulebook (incl. the 21:00 UTC firm-day reset and our
+60% soft line), and the challenge-math table with the pass-optimal risk
+row starred. Demo fixture carries the REAL M69 Monte Carlo numbers
+(3%/trade -> 72.6% phase-1). UI harness: 85 checks (+9).
