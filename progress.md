@@ -620,3 +620,69 @@ india (57.9% win, +1.15%); (3) the honest unlock for a pooled 55% is
 multi-year data + walk-forward (would also adjudicate crsi's suggestive
 21-trade 57%). Candidates remain on the research branch: registered,
 disabled, unpromoted.
+
+---
+
+## 2026-08-13 (later) — PRE-REGISTRATION: wide-india sample test for crsi (configs #26–28)
+
+Committed BEFORE any price data is fetched. Question: does crsi's
+Round-2 result (57.1% win / +0.40% at n=21 — carried by forex 8 tr @
+62.5% + crypto 12 tr @ 58.3%, india contributed only 1 trade on a
+3-name universe) hold once the india universe grows 3 -> 15 NIFTY
+names? Same frozen rules, more real trades — a sample-size extension,
+NOT a re-roll.
+
+Locked before running:
+- **Universe** (15 names, one portfolio, superset of market_india_6m):
+  RELIANCE TCS HDFCBANK INFY ICICIBANK SBIN BHARTIARTL ITC LT
+  KOTAKBANK AXISBANK HINDUNILVR MARUTI TITAN TATASTEEL. Chosen by
+  liquidity/sector spread; TATAMOTORS excluded for its Oct-2025
+  demerger (structural break in warmup window). No symbol may be
+  dropped after results are seen. Same data pedigree (Yahoo daily,
+  warmup 2025-11-03, report from 2026-02-05).
+- **Config #26 (adjudicated)**: crsi, Round-2 exit override
+  max_bars_no_progress=5 all legs, signal params UNTOUCHED. Pool =
+  india_wide_6m + forex_6m + crypto_6m (Round-2 pool with the india
+  dir swapped for its superset). Bar unchanged from the campaign:
+  win >=55% AND n >=30 AND retSum >0 AND CLEAN on every run.
+- **Configs #27/#28 (context, not adjudicated)**: tsmom and oops,
+  standard exits, india_wide only — does tsmom's 3-name india edge
+  (57.9%/+1.15%) survive a 5x wider universe?
+- Multiplicity: campaign count rises 25 -> 28. Disclosed.
+- Invariants: tsmom certified results must remain IDENTICAL; full
+  suite green; `git checkout -- data/` after every replay batch.
+
+---
+
+## 2026-08-13 (later) — RESULTS: wide-india sample test (configs #26–28)
+
+All runs CLEAN, chain OK, ZERO heat/budget rejections (numbers are
+signal quality, not portfolio-constraint artifacts). Window
+2026-02-05 → 2026-08-12; india_wide equal-weight buy&hold -6.67%
+(bear window: 11 of 15 names down).
+
+- **#26 crsi (adjudicated): FAIL.** Pooled n=57 (floor finally met):
+  win 42.1%, retSum -0.07%. india_wide alone: 37 tr @ 32.4%, -0.55%.
+  The Round-2 57.1% at n=21 was the small-sample fluke the n>=30
+  floor exists to catch — india contributed 1 trade then; at 37
+  trades the india leg runs 32% win. crsi is dead on this data.
+- **#27 tsmom (context): the 3-name india edge did NOT generalize.**
+  n=188 @ 43.6% win, -0.62% (vs 57.9%/+1.15% @ n=38 on 3 names).
+  Beat buy&hold by ~6pp but negative. The earlier "dual goal met
+  single-market" claim is DOWNGRADED: a 3-name, 38-trade artifact.
+  Certified 3-name results remain IDENTICAL (re-proven this session).
+- **#28 oops (context): the honest standout.** n=137 @ 48.2% win,
+  **+4.30%**, avgR +0.19, Sharpe 3.02, maxDD 0.88% — +11pp over
+  buy&hold in a bear window, consistent with its 3-name Phase-0
+  expectancy. Win rate is a style preference; expectancy is the
+  profit metric — oops keeps proving it.
+
+Campaign multiplicity now 28 configs; still ZERO passes of the
+pre-registered dual bar. The bar itself is the finding: high win
+rate AND a capped left tail remain mutually exclusive on this data.
+Walk-forward on multi-year data stays the honest unlock — now with
+oops-india_wide as the LEAD candidate to validate (and per-symbol
+tsmom selection as a question, not an assumption).
+
+Verification: 539 passed / 1 skipped; UI harness 85/85; tsmom
+certified IDENTICAL; data/ restored after every replay batch.

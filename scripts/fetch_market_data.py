@@ -30,6 +30,31 @@ MARKETS = {
         "TCS": {"yh": "TCS.NS", "leg": "india", "lot": 1, "adv": 2_500_000},
         "HDFCBANK": {"yh": "HDFCBANK.NS", "leg": "india", "lot": 1, "adv": 12_000_000},
     },
+    # Aug 2026: wider india universe — ONE 15-name portfolio (superset of
+    # "india") so the replay trades it under real portfolio constraints.
+    # Universe LOCKED in the ledger before any price data was fetched
+    # (pre-registration): NIFTY-50 large caps by liquidity/sector spread.
+    # TATAMOTORS deliberately excluded — its Oct-2025 CV/PV demerger puts a
+    # structural price break inside the warmup window (data integrity, not
+    # performance peeking). ADV = order-of-magnitude NSE shares/day for the
+    # impact model. No symbol may be dropped after results are seen.
+    "india_wide": {
+        "RELIANCE": {"yh": "RELIANCE.NS", "leg": "india", "lot": 1, "adv": 8_000_000},
+        "TCS": {"yh": "TCS.NS", "leg": "india", "lot": 1, "adv": 2_500_000},
+        "HDFCBANK": {"yh": "HDFCBANK.NS", "leg": "india", "lot": 1, "adv": 12_000_000},
+        "INFY": {"yh": "INFY.NS", "leg": "india", "lot": 1, "adv": 6_000_000},
+        "ICICIBANK": {"yh": "ICICIBANK.NS", "leg": "india", "lot": 1, "adv": 12_000_000},
+        "SBIN": {"yh": "SBIN.NS", "leg": "india", "lot": 1, "adv": 15_000_000},
+        "BHARTIARTL": {"yh": "BHARTIARTL.NS", "leg": "india", "lot": 1, "adv": 6_000_000},
+        "ITC": {"yh": "ITC.NS", "leg": "india", "lot": 1, "adv": 10_000_000},
+        "LT": {"yh": "LT.NS", "leg": "india", "lot": 1, "adv": 2_000_000},
+        "KOTAKBANK": {"yh": "KOTAKBANK.NS", "leg": "india", "lot": 1, "adv": 4_000_000},
+        "AXISBANK": {"yh": "AXISBANK.NS", "leg": "india", "lot": 1, "adv": 6_000_000},
+        "HINDUNILVR": {"yh": "HINDUNILVR.NS", "leg": "india", "lot": 1, "adv": 1_500_000},
+        "MARUTI": {"yh": "MARUTI.NS", "leg": "india", "lot": 1, "adv": 400_000},
+        "TITAN": {"yh": "TITAN.NS", "leg": "india", "lot": 1, "adv": 1_200_000},
+        "TATASTEEL": {"yh": "TATASTEEL.NS", "leg": "india", "lot": 1, "adv": 25_000_000},
+    },
     "forex": {
         # CFD costs: half-spread in price units + per-side commission
         "EURUSD": {"yh": "EURUSD=X", "leg": "mt5_forex", "lot": 1000, "adv": 1e12,

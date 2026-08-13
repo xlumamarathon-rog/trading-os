@@ -1,0 +1,80 @@
+{
+ "symbols": {
+  "RELIANCE": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 8000000
+  },
+  "TCS": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 2500000
+  },
+  "HDFCBANK": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 12000000
+  },
+  "INFY": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 6000000
+  },
+  "ICICIBANK": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 12000000
+  },
+  "SBIN": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 15000000
+  },
+  "BHARTIARTL": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 6000000
+  },
+  "ITC": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 10000000
+  },
+  "LT": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 2000000
+  },
+  "KOTAKBANK": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 4000000
+  },
+  "AXISBANK": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 6000000
+  },
+  "HINDUNILVR": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 1500000
+  },
+  "MARUTI": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 400000
+  },
+  "TITAN": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 1200000
+  },
+  "TATASTEEL": {
+   "leg": "india",
+   "lot": 1,
+   "adv": 25000000
+  }
+ },
+ "report_from": "2026-02-05"
+}

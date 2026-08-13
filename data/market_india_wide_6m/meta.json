@@ -1,0 +1,137 @@
+{
+ "RELIANCE": {
+  "bars_total": 195,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 1443.400024,
+  "end_px": 1329.0,
+  "period_return_pct": -7.93,
+  "real_max_drawdown_pct": 14.9
+ },
+ "TCS": {
+  "bars_total": 194,
+  "bars_in_window": 129,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 2991.5,
+  "end_px": 2349.699951,
+  "period_return_pct": -21.45,
+  "real_max_drawdown_pct": 33.92
+ },
+ "HDFCBANK": {
+  "bars_total": 195,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 949.700012,
+  "end_px": 729.0,
+  "period_return_pct": -23.24,
+  "real_max_drawdown_pct": 23.98
+ },
+ "INFY": {
+  "bars_total": 195,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 1520.199951,
+  "end_px": 1176.099976,
+  "period_return_pct": -22.64,
+  "real_max_drawdown_pct": 35.38
+ },
+ "ICICIBANK": {
+  "bars_total": 195,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 1396.5,
+  "end_px": 1431.699951,
+  "period_return_pct": 2.52,
+  "real_max_drawdown_pct": 16.95
+ },
+ "SBIN": {
+  "bars_total": 194,
+  "bars_in_window": 129,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 1073.5,
+  "end_px": 1082.0,
+  "period_return_pct": 0.79,
+  "real_max_drawdown_pct": 23.94
+ },
+ "BHARTIARTL": {
+  "bars_total": 195,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 1992.400024,
+  "end_px": 1945.0,
+  "period_return_pct": -2.38,
+  "real_max_drawdown_pct": 14.61
+ },
+ "ITC": {
+  "bars_total": 194,
+  "bars_in_window": 129,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 310.200012,
+  "end_px": 276.149994,
+  "period_return_pct": -10.98,
+  "real_max_drawdown_pct": 17.28
+ },
+ "LT": {
+  "bars_total": 194,
+  "bars_in_window": 129,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 4063.300049,
+  "end_px": 4020.0,
+  "period_return_pct": -1.07,
+  "real_max_drawdown_pct": 25.58
+ },
+ "KOTAKBANK": {
+  "bars_total": 193,
+  "bars_in_window": 128,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 408.75,
+  "end_px": 390.5,
+  "period_return_pct": -4.46,
+  "real_max_drawdown_pct": 19.78
+ },
+ "AXISBANK": {
+  "bars_total": 194,
+  "bars_in_window": 129,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 1330.599976,
+  "end_px": 1230.0,
+  "period_return_pct": -7.56,
+  "real_max_drawdown_pct": 18.01
+ },
+ "HINDUNILVR": {
+  "bars_total": 195,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 2354.399902,
+  "end_px": 2063.0,
+  "period_return_pct": -12.38,
+  "real_max_drawdown_pct": 18.15
+ },
+ "MARUTI": {
+  "bars_total": 192,
+  "bars_in_window": 127,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 15059.0,
+  "end_px": 13875.0,
+  "period_return_pct": -7.86,
+  "real_max_drawdown_pct": 20.83
+ },
+ "TITAN": {
+  "bars_total": 195,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 4097.600098,
+  "end_px": 5099.0,
+  "period_return_pct": 24.44,
+  "real_max_drawdown_pct": 12.44
+ },
+ "TATASTEEL": {
+  "bars_total": 195,
+  "bars_in_window": 130,
+  "window": "2026-02-05 \u2192 2026-08-12",
+  "start_px": 197.759995,
+  "end_px": 186.199997,
+  "period_return_pct": -5.85,
+  "real_max_drawdown_pct": 18.06
+ }
+}
