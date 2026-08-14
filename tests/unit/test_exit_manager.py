@@ -199,10 +199,12 @@ async def test_stop_hit_exit_with_mfe_telemetry():
     pos = await attach_long(mgr)                        # stop 97, R=3
     await mgr.on_bar("X", 103.2, 102.5, 103.1, TREND)   # +1R, breakeven, extreme 103.2
     actions = await mgr.on_bar("X", 100.5, 99.5, 99.8, TREND)   # low 99.5 ≤ stop 100
-    assert actions == ["exit:stop_hit"]
+    # audit BUG-7: the breakeven stop being hit is its own species now
+    assert actions == ["exit:stop_breakeven"]
     t = pos.telemetry
-    assert t.exit_reason == "stop_hit" and t.exit_price == pytest.approx(100.0)
-    assert t.mfe_r > 1.0 and 0 <= t.mfe_captured_pct <= 100
+    assert t.exit_reason == "stop_breakeven" and t.exit_price == pytest.approx(100.0)
+    assert t.mfe_r > 1.0 and t.capture_pct is not None and 0 <= t.capture_pct <= 100
+    assert t.giveback_r == pytest.approx(t.mfe_r - t.realized_r)
     # partials produced exits; stop_hit itself must NOT add a market sell (no double-exit)
     partial_sells = len([p for p in pos.partials_taken])
     assert len(adapter.exits) == partial_sells

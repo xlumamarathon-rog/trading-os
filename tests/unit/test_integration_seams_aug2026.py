@@ -171,4 +171,5 @@ async def test_exit_callbacks_accept_sync_callables():
     await mgr.on_bar("X", 103.6, 102.0, 103.2, TREND)               # +1R -> partial
     assert ("partial", "X", 33.0) in events
     await mgr.on_bar("X", 103.0, pos.stop - 0.1, pos.stop, TREND)   # stop hit
-    assert ("exit", "X", "stop_hit") in events
+    # audit BUG-7: stop hit at the breakeven level reports its species
+    assert ("exit", "X", "stop_breakeven") in events

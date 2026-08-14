@@ -9,7 +9,9 @@ State machine per position:
              stop = extreme ∓ k_trail[regime]·ATR, k from regime_detector
              (STRONG_TREND loose … SHOCK tight). Tighten triggers: event window,
              crypto weekend, regime SHOCK.
-  EXITED     stop hit / time stop / flatten policy. Telemetry: MFE captured %.
+  EXITED     stop hit / time stop / flatten policy. Telemetry (audit 2026-08):
+             realistic exit fill, giveback_r, gated capture_pct, cash_r_gross,
+             and stop species split (stop_initial/stop_breakeven/stop_trail).
 
 INVARIANTS (code-enforced, property-tested):
   - the stop only EVER moves toward profit (never_widen_stop) — a widening
@@ -43,11 +45,20 @@ class StopWidenAttempt(RuntimeError):
 
 @dataclass
 class ExitTelemetry:
+    """Aug 2026 execution audit (BUG-3/4/7 fixes):
+    - exit_price is the REALISTIC fill (gap-aware), not the stop level
+    - realized_r stays the remainder-vs-initial-risk telemetry number
+    - cash_r_gross is qty-weighted across ALL legs (partials included),
+      gross of costs — the harness adds broker-true costs on top
+    - the old unbounded mfe_captured_pct is replaced by giveback_r plus a
+      capture_pct that only exists when the trade had a real MFE (>=0.5R)"""
     exit_reason: str
     exit_price: float
     realized_r: float
     mfe_r: float
-    mfe_captured_pct: float
+    giveback_r: float
+    capture_pct: Optional[float]
+    cash_r_gross: float
 
 
 @dataclass
@@ -63,7 +74,9 @@ class ManagedPosition:
     stop_order_id: str
     state: str = "RISK_ON"         # RISK_ON | BREAKEVEN | TRAILING | EXITED
     extreme: float = 0.0           # highest high (long) / lowest low (short)
-    bars_no_progress: int = 0
+    bars_no_progress: int = 0      # unit: COMPLETED reference bars (audit BUG-2)
+    progress_in_bar: bool = False  # any new extreme inside the current ref bar
+    exit_legs: list = field(default_factory=list)   # [(qty, price)] partials+final
     partials_taken: list = field(default_factory=list)
     remaining_qty: float = 0.0
     lot_size: float = 1.0
@@ -152,7 +165,8 @@ class ExitManager:
 
     async def _take_partial(self, pos: ManagedPosition, at_r: float, pct: float, price: float) -> None:
         """Partials are REAL broker orders: lot-floored, executed via the adapter,
-        and the resting stop is re-placed for the remaining quantity."""
+        and the resting stop is re-placed for the remaining quantity.
+        `price` is the realistic ladder fill (audit BUG-5) chosen by on_bar."""
         lot = getattr(pos, "lot_size", 1.0)
         import math as _math
         qty = _math.floor((pos.qty * pct / 100.0) / lot) * lot
@@ -162,6 +176,7 @@ class ExitManager:
         await self.adapter.exit_market(pos.symbol, qty, pos.leg,
                                        direction=pos.direction)
         pos.remaining_qty = max(0.0, pos.remaining_qty - qty)
+        pos.exit_legs.append((qty, price))
         if pos.remaining_qty > 0 and hasattr(self.adapter, "replace_stop"):
             pos.stop_order_id = await self.adapter.replace_stop(
                 pos.stop_order_id, pos.symbol, pos.remaining_qty, pos.stop, pos.leg,
@@ -169,15 +184,38 @@ class ExitManager:
         if self.on_partial:
             await _maybe_await(self.on_partial(pos.symbol, qty, price, at_r))
 
+    def _classify_stop(self, pos: ManagedPosition) -> str:
+        """Audit BUG-7 telemetry fix: 'stop_hit' conflated three species with
+        opposite meanings. Classify by where the stop sat vs entry."""
+        tol = 0.05 * pos.r_value
+        profit_side = (pos.stop > pos.entry + tol) if pos.is_long \
+            else (pos.stop < pos.entry - tol)
+        if profit_side:
+            return "stop_trail"
+        if abs(pos.stop - pos.entry) <= tol:
+            return "stop_breakeven"
+        return "stop_initial"
+
     async def _exit(self, pos: ManagedPosition, price: float, reason: str) -> None:
+        if reason == "stop_hit":
+            reason = self._classify_stop(pos)
         mfe_r = self._r_multiple(pos, pos.extreme)
         realized_r = self._r_multiple(pos, price)
+        # qty-weighted gross cash R across every leg (audit BUG-4): the
+        # final remainder exits at `price`, partial legs were recorded as
+        # they filled. Costs are added by the harness from broker fills.
+        legs = list(pos.exit_legs) + [(max(0.0, pos.remaining_qty), price)]
+        pnl = sum(q * ((p - pos.entry) if pos.is_long else (pos.entry - p))
+                  for q, p in legs)
+        denom = pos.r_value * pos.qty
         pos.telemetry = ExitTelemetry(
-            exit_reason=reason, exit_price=price, realized_r=realized_r, mfe_r=mfe_r,
-            mfe_captured_pct=(realized_r / mfe_r * 100.0) if mfe_r > 0 else 0.0,
+            exit_reason=reason, exit_price=price, realized_r=realized_r,
+            mfe_r=mfe_r, giveback_r=mfe_r - realized_r,
+            capture_pct=(realized_r / mfe_r * 100.0) if mfe_r >= 0.5 else None,
+            cash_r_gross=(pnl / denom) if denom else 0.0,
         )
         pos.state = "EXITED"
-        if reason == "stop_hit":
+        if reason.startswith("stop_"):
             # The BROKER-resident stop already closed the remainder server-side.
             # Selling again here would double-exit (integration-test-caught bug).
             pass_through = True
@@ -216,9 +254,27 @@ class ExitManager:
 
     # ---------- per-bar lifecycle ----------
 
+    def _ladder_fill(self, pos: ManagedPosition, at_r: float,
+                     high: float, low: float, close: float) -> float:
+        """Audit BUG-5: a partial is a resting limit at the ladder level —
+        fill AT the ladder when the bar's range contains it; only when the
+        bar gapped clean past it does the close stand in (pessimistic)."""
+        ladder = pos.entry + at_r * pos.r_value if pos.is_long \
+            else pos.entry - at_r * pos.r_value
+        if low <= ladder <= high:
+            return ladder
+        return close
+
     async def on_bar(self, symbol: str, high: float, low: float, close: float,
                      regime: dict, event_minutes: Optional[float] = None,
-                     crypto_weekend: bool = False) -> list[str]:
+                     crypto_weekend: bool = False, bar_closed: bool = True,
+                     open_px: Optional[float] = None) -> list[str]:
+        """bar_closed (audit BUG-2): the time-stop unit is COMPLETED
+        reference bars. Callers that chop one reference bar into several
+        sub-bar calls pass bar_closed=True only on the last one; callers
+        whose every call IS a full bar keep the default. open_px (audit
+        BUG-3): first price of this window, so a gapped-through stop books
+        the realistic fill instead of the stop level."""
         pos = self.positions.get(symbol)
         if pos is None or pos.state == "EXITED":
             return []
@@ -235,24 +291,35 @@ class ExitManager:
             await self._exit(pos, close, "crypto_weekend_flatten")
             return ["exit:crypto_weekend_flatten"]
 
-        # 1. stop hit? (broker fills it server-side; we account for it)
+        # 1. stop hit? (broker fills it server-side; we account for it —
+        #    at the GAPPED price when the window opened beyond the stop)
         hit = low <= pos.stop if pos.is_long else high >= pos.stop
         if hit:
-            await self._exit(pos, pos.stop, "stop_hit")
-            return ["exit:stop_hit"]
+            fill = pos.stop
+            if open_px is not None:
+                fill = min(pos.stop, open_px) if pos.is_long \
+                    else max(pos.stop, open_px)
+            await self._exit(pos, fill, "stop_hit")
+            return [f"exit:{pos.telemetry.exit_reason}"]
 
-        # 2. extremes + progress
+        # 2. extremes + progress (progress marks the whole reference bar)
         new_extreme = max(pos.extreme, high) if pos.is_long else min(pos.extreme, low)
         if new_extreme != pos.extreme:
             pos.extreme = new_extreme
-            pos.bars_no_progress = 0
-        else:
-            pos.bars_no_progress += 1
+            pos.progress_in_bar = True
 
-        # 3. time stop (frees capital; caps swap bleed on crypto CFDs)
-        if pos.bars_no_progress >= int(self.cfg["max_bars_no_progress"][pos.leg]):
-            await self._exit(pos, close, "time_stop_no_progress")
-            return ["exit:time_stop"]
+        # 3. time stop — counted in COMPLETED reference bars (audit BUG-2:
+        #    the old per-call counter made "20 bars" mean 5 days in replays
+        #    and 20 ticks live; three callers disagreed)
+        if bar_closed:
+            if pos.progress_in_bar:
+                pos.bars_no_progress = 0
+            else:
+                pos.bars_no_progress += 1
+            pos.progress_in_bar = False
+            if pos.bars_no_progress >= int(self.cfg["max_bars_no_progress"][pos.leg]):
+                await self._exit(pos, close, "time_stop_no_progress")
+                return ["exit:time_stop"]
 
         r_now = self._r_multiple(pos, close)
         partial_cfgs = self.cfg["partials"]
@@ -265,7 +332,8 @@ class ExitManager:
             if partial_cfgs:
                 p1 = partial_cfgs[0]
                 if float(p1["at_r"]) not in pos.partials_taken:
-                    await self._take_partial(pos, float(p1["at_r"]), float(p1["pct"]), close)
+                    fill = self._ladder_fill(pos, float(p1["at_r"]), high, low, close)
+                    await self._take_partial(pos, float(p1["at_r"]), float(p1["pct"]), fill)
                     actions.append("partial_1")
             pos.state = "BREAKEVEN"
 
@@ -274,7 +342,8 @@ class ExitManager:
                 r_now >= float(partial_cfgs[1]["at_r"]):
             p2 = partial_cfgs[1]
             if float(p2["at_r"]) not in pos.partials_taken:
-                await self._take_partial(pos, float(p2["at_r"]), float(p2["pct"]), close)
+                fill = self._ladder_fill(pos, float(p2["at_r"]), high, low, close)
+                await self._take_partial(pos, float(p2["at_r"]), float(p2["pct"]), fill)
                 actions.append("partial_2")
             pos.state = "TRAILING"
 

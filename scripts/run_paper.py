@@ -239,7 +239,9 @@ async def assemble(data_dir: Path):
             if runtime.exit_mgr.positions.get(sym) else "",
             "realized_r": round(telemetry.realized_r, 2),
             "reason": telemetry.exit_reason, "exit_reason": telemetry.exit_reason,
-            "mfe_captured_pct": round(telemetry.mfe_captured_pct, 1),
+            "giveback_r": round(telemetry.giveback_r, 2),
+            "capture_pct": (round(telemetry.capture_pct, 1)
+                            if telemetry.capture_pct is not None else None),
             "sleeve": sleeve})
         engine.record_exit(sym, telemetry.realized_r)
         if prop_guard is not None:
@@ -249,6 +251,8 @@ async def assemble(data_dir: Path):
     runtime.exit_mgr.on_exit = on_exit_cb
 
     # ---------------- feed loop ----------------
+
+    bar_marks: dict = {}
 
     async def feed_loop():
         while True:
@@ -265,9 +269,16 @@ async def assemble(data_dir: Path):
                 if pos is not None and pos.state != "EXITED":
                     k = feed.candles(sym, 1)
                     if k:
+                        # audit BUG-2 FIX: live time-stop unit = COMPLETED
+                        # DAILY BARS (the feed's daily-roll edge), never
+                        # ticks — the same unit every replay now counts.
+                        done = feed.completed_count(sym)
+                        rolled = done > bar_marks.get(sym, done)
+                        bar_marks[sym] = done
                         await runtime.exit_mgr.on_bar(
                             sym, high=k[-1]["h"], low=k[-1]["l"],
-                            close=k[-1]["c"], regime={})
+                            close=k[-1]["c"], regime={},
+                            bar_closed=rolled, open_px=k[-1]["o"])
             # MODULE 65: enabled sleeves evaluate on completed bars — same
             # router door as manual tickets, nothing fires while disabled
             await engine.on_tick()

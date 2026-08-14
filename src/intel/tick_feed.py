@@ -47,7 +47,14 @@ class TickFeedWorker:
             w = self._windows.setdefault(sym, [])
             w.append(px)
             if len(w) >= self.sub_bar:
-                await self.exit_mgr.on_bar(sym, max(w), min(w), w[-1], self.regime_fn(sym))
+                # audit BUG-2: these are intraday SUB-BAR windows, not
+                # completed daily bars — bar_closed=False so the daily
+                # time-stop counter never ticks here (the M67 run_paper
+                # feed loop owns the daily-roll edge). open_px = first
+                # tick of the window for gap-aware stop fills.
+                await self.exit_mgr.on_bar(sym, max(w), min(w), w[-1],
+                                           self.regime_fn(sym),
+                                           bar_closed=False, open_px=w[0])
                 self.snapshot.push_candle(sym, int(ts), w[0], max(w), min(w), w[-1])
                 self._windows[sym] = []
             self.processed += 1

@@ -86,9 +86,9 @@ GIVEBACK_PCT = float(os.environ.get("GIVEBACK_PCT", "0"))   # e.g. 0.02 = 2%
 # HONEST_INPUTS=1 the ATR and regime that price the stop, size the order and
 # select the trail multiplier are computed from bars[:i] (lag-1) instead of
 # including the fill bar's own H/L/C. Default 0 keeps every certified result
-# byte-identical; NEW research replays must run with 1 so their numbers are
-# free of the documented lookahead. (docs/EXECUTION_AUDIT_AUG2026.md §7-1.)
-HONEST_INPUTS = bool(int(os.environ.get("HONEST_INPUTS", "0")))
+# byte-identical; superseded 2026-08-14 (fix-everything campaign): lag-1
+# ATR/regime is now the ONLY path — the flag is retired and the certified
+# baselines were re-run on the fixed engine (see ledger for old-vs-new).
 
 # RESEARCH-ONLY risk override (never touches production config): lets the lab
 # quantify what higher per-trade risk does to return AND drawdown.
@@ -97,6 +97,30 @@ if _risk_override:
     object.__setattr__(CFG.risk_limits, "max_risk_per_trade_pct", float(_risk_override))
     object.__setattr__(CFG.risk_limits, "max_position_pct",
                        max(CFG.risk_limits.max_position_pct, float(_risk_override) * 5))
+
+# EXIT-STYLE experiment (configs #33-34, pre-registered c39617a): a
+# per-sleeve SIGNAL EXIT decided strictly on completed bars (bars[:i]),
+# executed at bar i's open through the active-exit path (cancel stop ->
+# market out). Modes: "" (off) | "reverse" (opposite entry signal) |
+# "ma5" (Connors: close beyond SMA5, mirrored for shorts).
+EXIT_SIGNAL = os.environ.get("EXIT_SIGNAL", "")
+
+
+def signal_exit_wanted(mode, signal_fn, bars, i, regime, held_dir):
+    """Pure + causal: reads bars[:i] only (the same contract entries obey)."""
+    if not mode or held_dir not in ("buy", "sell"):
+        return False
+    if mode == "reverse":
+        opp = signal_fn(bars, i, regime)
+        return opp is not None and opp != held_dir
+    if mode == "ma5":
+        if i < 6:
+            return False
+        s5 = sum(b["close"] for b in bars[i - 5:i]) / 5
+        prev_close = bars[i - 1]["close"]
+        return prev_close > s5 if held_dir == "buy" else prev_close < s5
+    raise ValueError(f"unknown EXIT_SIGNAL mode {mode!r}")
+
 
 # DAILY SESSION GUARD (anti-overtrading): once the day's P&L crosses either
 # mark, NO NEW entries for the rest of the session — open positions keep
@@ -150,9 +174,18 @@ def sma(bars, i, n=20):
 from src.strategies.signals import SIGNALS  # noqa: E402
 
 
-def intrabar_path(bar, rng):
+def intrabar_path(bar, rng, held_dir=None):
+    """audit BUG-6 FIX: while a position is OPEN the synthetic path visits
+    the ADVERSE extreme first (long -> low first, short -> high first), so
+    partials/ratchets can never bank at prices a pessimistic path denies.
+    With no position the close-direction heuristic stands."""
     o, h, l, c = bar["open"], bar["high"], bar["low"], bar["close"]
-    way = [o, l, h, c] if c >= o else [o, h, l, c]
+    if held_dir == "buy":
+        way = [o, l, h, c]
+    elif held_dir == "sell":
+        way = [o, h, l, c]
+    else:
+        way = [o, l, h, c] if c >= o else [o, h, l, c]
     ticks = []
     per_leg = TICKS_PER_BAR // (len(way) - 1)
     for a, b in zip(way, way[1:]):
@@ -242,11 +275,32 @@ async def run():
     guard = AnomalyGuard(redis=redis, velocity_sigma={"s1": 6, "s5": 5, "s30": 4},
                          spread_blowout_mult=3.0, volume_spike_mult=5.0, cooloff_minutes=15)
     exits_log = []
+    trade_marks = {}
 
     async def on_exit(sym, telemetry):
+        # audit BUG-4 FIX: per-trade AFTER-COST cash R from the broker's own
+        # fills (entry + partials + final exit legs; costs per fill). This is
+        # the P&L distribution; telemetry realized_r stays as the legacy
+        # remainder-vs-initial-risk number.
+        r_cash = None
+        pos = exit_mgr.positions.get(sym)
+        mark = trade_marks.pop(sym, None)
+        if pos is not None and mark is not None:
+            pnl = 0.0
+            for f in broker.fills[mark:]:
+                if f.symbol != sym:
+                    continue
+                pnl += (f.qty * f.price if f.action == "SELL"
+                        else -f.qty * f.price) - f.cost
+            denom = pos.r_value * pos.qty
+            r_cash = round(pnl / denom, 3) if denom else None
         exits_log.append({"symbol": sym, "reason": telemetry.exit_reason,
                           "realized_r": round(telemetry.realized_r, 2),
-                          "mfe_captured_pct": round(telemetry.mfe_captured_pct, 1)})
+                          "realized_r_cash": r_cash,
+                          "giveback_r": round(telemetry.giveback_r, 2),
+                          "capture_pct": (round(telemetry.capture_pct, 1)
+                                          if telemetry.capture_pct is not None
+                                          else None)})
 
     exit_cfg = dict(CFG.model_extra["exit_manager"])
     exit_cfg.update(EXIT_OVERRIDES)
@@ -297,10 +351,21 @@ async def run():
             if i is None or i < 21:
                 continue
             bar = bars[i]
-            _j = i - 1 if HONEST_INPUTS else i     # audit BUG-1: lag-1 inputs
-            a = atr14(bars, _j)
-            regime = real_regime(bars, _j)
+            # audit BUG-1 FIX (default since 2026-08-14): risk inputs are
+            # computed from completed bars only — the fill bar's own range
+            # can never price its own stop, size, or trail regime.
+            a = atr14(bars, i - 1)
+            regime = real_regime(bars, i - 1)
             broker.on_tick(sym, bar["open"])
+
+            # EXIT-STYLE experiment: signal exit at THIS bar's open, decided
+            # on completed bars only; frees the symbol for the entry logic
+            if EXIT_SIGNAL:
+                _pos = exit_mgr.positions.get(sym)
+                if _pos is not None and _pos.state != "EXITED" and \
+                        signal_exit_wanted(EXIT_SIGNAL, signal_fn, bars, i,
+                                           regime, _pos.direction):
+                    await exit_mgr.manual_exit(sym, bar["open"], "signal_exit")
 
             held = sym in exit_mgr.positions and exit_mgr.positions[sym].state != "EXITED"
             day_ok = session_guard.allows_new_entries(broker.equity())
@@ -332,6 +397,9 @@ async def run():
                 result = await router.route_order(req)
                 if result.accepted and result.record.filled_qty > 0:
                     exit_mgr.positions.pop(sym, None)
+                    # audit BUG-4: bookmark the entry fill so the exit
+                    # callback can price the WHOLE trade from broker fills
+                    trade_marks[sym] = len(broker.fills) - 1
                     await exit_mgr.attach(symbol=sym, direction=direction,
                                           entry=result.record.avg_fill_price,
                                           qty=result.record.filled_qty, atr=a,
@@ -340,16 +408,25 @@ async def run():
                 else:
                     rejected[result.reason.split(":")[0]] = rejected.get(result.reason.split(":")[0], 0) + 1
 
-            ticks = intrabar_path(bar, rng)
+            # audit BUG-6: adverse-first path while a position is open
+            held = exit_mgr.positions.get(sym)
+            held_dir = held.direction if held and held.state != "EXITED" else None
+            ticks = intrabar_path(bar, rng, held_dir=held_dir)
             window = []
-            for px in ticks:
+            for t_i, px in enumerate(ticks):
                 clock += 1.0
                 broker.on_tick(sym, px)
                 await guard.process_tick(sym, Tick(ts=clock, price=px,
                                                    bid=px * 0.9999, ask=px * 1.0001, volume=1000))
                 window.append(px)
                 if len(window) == SUB_BAR:
-                    await exit_mgr.on_bar(sym, max(window), min(window), window[-1], regime)
+                    # audit BUG-2/3: the LAST sub-bar closes the daily bar
+                    # (time-stop unit = completed daily bars) and each
+                    # window hands its first tick over for gap-aware fills
+                    await exit_mgr.on_bar(sym, max(window), min(window),
+                                          window[-1], regime,
+                                          bar_closed=(t_i == len(ticks) - 1),
+                                          open_px=window[0])
                     window = []
         await redis.delete("PAUSE_ENTRIES")
         gate = advance_gate(gate_path, reconciliation_clean=True)
@@ -377,11 +454,14 @@ async def run():
     meta = json.loads((DATA_DIR / "meta.json").read_text())
     bh = sum(m["period_return_pct"] for m in meta.values()) / len(meta)
 
-    wins = [e for e in exits_log if e["realized_r"] > 0]
+    cash_tape = [e["realized_r_cash"] for e in exits_log
+                 if e["realized_r_cash"] is not None]
+    wins = [x for x in cash_tape if x > 0]
     reasons = {}
     for e in exits_log:
         reasons[e["reason"]] = reasons.get(e["reason"], 0) + 1
-    mfe = [e["mfe_captured_pct"] for e in exits_log if e["mfe_captured_pct"] is not None]
+    gives = [e["giveback_r"] for e in exits_log]
+    caps = [e["capture_pct"] for e in exits_log if e["capture_pct"] is not None]
 
     results = {
         "strategy_name": STRATEGY,
@@ -407,19 +487,26 @@ async def run():
         "budget": budget.snapshot(broker.equity()) if budget else None,
         "budget_blocked_days": len(budget_blocked_days),
         "closed_trades": len(exits_log),
-        "win_rate_pct": round(100 * len(wins) / len(exits_log), 1) if exits_log else None,
-        "avg_realized_r": round(sum(e["realized_r"] for e in exits_log) / len(exits_log), 2) if exits_log else None,
-        "avg_mfe_captured_pct": round(sum(mfe) / len(mfe), 1) if mfe else None,
+        # audit BUG-4 FIX: headline win rate + avg R are CASH-BASIS
+        # (qty-weighted, after costs, gap slippage included). The legacy
+        # telemetry tape stays available, explicitly labeled.
+        "win_rate_pct": round(100 * len(wins) / len(cash_tape), 1) if cash_tape else None,
+        "avg_realized_r": round(sum(cash_tape) / len(cash_tape), 3) if cash_tape else None,
+        "win_rate_telemetry_pct": (round(100 * sum(1 for e in exits_log if e["realized_r"] > 0)
+                                         / len(exits_log), 1) if exits_log else None),
+        "avg_giveback_r": round(sum(gives) / len(gives), 2) if gives else None,
+        "median_capture_pct": (sorted(caps)[len(caps) // 2] if caps else None),
         "total_costs": round(broker.total_costs, 2),
         "exit_reasons": reasons,
         "entry_rejections": rejected,
         "reconciliation": "CLEAN" if rep.clean else "MISMATCH",
         "audit_chain_ok": audit.verify_chain(),
-        # MODULE 66 (additive, like 809a6c6's metrics): the per-trade
-        # R-multiples behind the aggregates — feeds the risk optimizer's
-        # empirical Kelly + bootstrap drawdown. Existing certified fields
-        # unchanged (proven by field-for-field comparison on tsmom/india).
-        "trades_r": [e["realized_r"] for e in exits_log],
+        # MODULE 66 feed — audit BUG-4 FIX (2026-08-14): trades_r is now the
+        # AFTER-COST CASH tape (the P&L distribution), so the risk
+        # optimizer's empirical Kelly + bootstrap drawdown eat honest food.
+        # The legacy telemetry tape stays available, explicitly labeled.
+        "trades_r": cash_tape,
+        "trades_r_telemetry": [e["realized_r"] for e in exits_log],
     }
     (OUT / "results.json").write_text(json.dumps(results, indent=1))
     (OUT / "equity_curve.json").write_text(json.dumps(equity_curve))

@@ -74,7 +74,7 @@ async def main():
 
     async def trades_fn():
         return [{"symbol": "X", "direction": "buy", "realized_r": 1.2,
-                 "reason": "trail_stop", "mfe_captured_pct": 70.0}]
+                 "reason": "trail_stop", "capture_pct": 70.0}]
 
     app = create_gateway(tokens={"VIEW1234": "viewer", "OPER5678": "operator"},
                          kill_switch=ks, audit_log=audit, snapshot_fn=snapshot,

@@ -144,9 +144,9 @@ const demo = {
   gate: { paper_days_completed: 5, clean_reconciliation_streak: 2,
           sebi_checks_passed: false, static_ip_confirmed: false, human_ack: false },
   trades: [
-    { symbol: "RELIANCE", direction: "buy", realized_r: 1.8, reason: "trail_stop", mfe_captured_pct: 78.3, sleeve: "tsmom_f" },
-    { symbol: "BTCUSD", direction: "sell", realized_r: -0.9, reason: "stop_hit", mfe_captured_pct: 0.0, sleeve: "tsmom_f" },
-    { symbol: "EURUSD", direction: "buy", realized_r: 0.4, reason: "time_stop_no_progress", mfe_captured_pct: 31.0, sleeve: "accurate" },
+    { symbol: "RELIANCE", direction: "buy", realized_r: 1.8, reason: "stop_trail", capture_pct: 78.3, sleeve: "tsmom_f" },
+    { symbol: "BTCUSD", direction: "sell", realized_r: -0.9, reason: "stop_initial", capture_pct: null, sleeve: "tsmom_f" },
+    { symbol: "EURUSD", direction: "buy", realized_r: 0.4, reason: "time_stop_no_progress", capture_pct: null, sleeve: "accurate" },
   ],
   history: [
     { date: "2026-08-07", symbol: "RELIANCE", leg: "india", direction: "buy", realized_r: 1.8, exit_reason: "trail_stop", sleeve: "tsmom_f" },
@@ -854,7 +854,7 @@ async function renderBlotter() {
   tbody.innerHTML = (trades || []).slice(-25).reverse().map(t => `
     <tr><td>${esc(t.symbol)}</td><td>${esc(t.direction || "")}</td>
     <td class="${(t.realized_r ?? 0) >= 0 ? "pos" : "neg"}">${(t.realized_r ?? 0).toFixed(2)}R</td>
-    <td>${esc(t.reason)}</td><td>${esc(t.mfe_captured_pct ?? "")}</td></tr>`).join("")
+    <td>${esc(t.reason)}</td><td>${esc(t.capture_pct ?? "\u2014")}</td></tr>`).join("")
     || `<tr><td colspan="5" class="sub">no closed trades yet</td></tr>`;
 }
 

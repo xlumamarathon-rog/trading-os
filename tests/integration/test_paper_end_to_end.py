@@ -141,7 +141,7 @@ async def test_full_paper_lifecycle_entry_trail_stop_reconcile(stack, tmp_path):
     await exit_mgr.on_bar("RELIANCE", pos.stop * 0.999, pos.stop * 0.99,
                           pos.stop * 0.995, TREND)
     assert pos.state == "EXITED"
-    assert pos.telemetry.exit_reason == "stop_hit"
+    assert pos.telemetry.exit_reason == "stop_trail"  # audit BUG-7 species
 
     # ---- 5. BOOKS: paper broker has no more resting stops for the runner
     #      (partials were engine-side bookings; broker position reflects fills)

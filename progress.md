@@ -940,3 +940,130 @@ Standing insight strengthened: at NSE retail cost structure (flat
 sub-15bp/day daily-bar edge can survive — edges must be multi-day
 (hold longer, pay once) or the sizing cap must change first. This is
 the same conclusion the execution audit reached from the cost side.
+
+---
+
+## 2026-08-14 — FIX-EVERYTHING CAMPAIGN, Phases 1-2 complete + PRE-REGISTRATION of the exit-style experiment (configs #33-34)
+
+**Phase 1 — all 7 audit bugs FIXED in the engine (commit 17557b4):**
+BUG-2 time stop = completed reference bars (bar_closed flag; replay/
+paper/live agree; tick_feed sub-bars never tick it); BUG-3 gap-aware
+stop fills; BUG-4 trades_r = broker-true after-cost cash tape (win/avgR
+cash-basis; telemetry tape kept labeled); BUG-5 ladder-priced partials;
+BUG-6 adverse-first paths; BUG-7 stop species + giveback/gated-capture;
+BUG-1 lag-1 inputs now the only path (flag retired). 590 tests green.
+M71 validation_stats adopted (DSR/MinTRL/MinBTL pinned to published
+anchors).
+
+**RE-BASELINE (all CLEAN; supersedes every prior certified number):**
+- tsmom india (anchor): -0.02% -> **+0.84%, Sharpe 1.08, n=19, cash
+  win 57.9%, sumRc +2.52** — the honest 20-DAY time stop improved it.
+- tsmom india_wide: -0.96%, n=106, 46.2%, sumRc -13.45 (still no
+  15-name generalization).
+- oops india_wide: 4.30%/0.88/3.02 (inflated) -> **+3.69% / MDD 1.98% /
+  Sharpe 2.41 / n=102 / cash win 58.8% / sumRc +4.91** — survives the
+  fixes honestly; NOT promotable (Gate-0, below).
+- mt5 legs collapse: oops fx n=1, crypto n=0; tsmom fx avgR -0.556.
+- Stress: covid -1.16%, gfc +0.38%, flash -0.75% — no blowups.
+
+**Phase 2 — tainted numbers re-derived on honest cash tapes:**
+- mt5-leg pooled: n=68, sum -8.16R, win 42.6% -> **NEGATIVE EDGE**.
+- M69 honest challenge math: best risk 2% gives **P(pass)=19%,
+  P(bust)=80.8%** (was 67.1%/53.2% on the tainted tape).
+  **VERDICT: DO NOT PAY ANY CHALLENGE FEE on current evidence.**
+- india pooled honest: n=121, +7.44R, 58.7% win — the honest positive.
+
+**VALIDATION REALITY (M71, research agent verified vs published
+anchors):** at 6 months / 32 disclosed trials, noise alone yields best
+in-sample annSR ~2.97; DSR>0.95 needs annSR 3.0-4.9; MinBTL(32)=4.4
+years. **Gate-0 fails for EVERYTHING at this data length — no sleeve
+can be promoted until the multi-year fetch lands.** All Phase 4-5
+results below are ENGINEERING VERIFICATION of the canon fixes, not
+promotion evidence.
+
+**PRE-REGISTRATION configs #33-34 (M: 32 -> 34; re-baselines are bug
+fixes on existing configs, not new trials):**
+- **#33 TREND exit profile on tsmom** (india_wide+forex+forex_wide+
+  crypto): signal-REVERSAL exit (opposite tsmom signal, decided on
+  bars[:i], executed next open) + no partials + no breakeven +
+  regime-INDEPENDENT 3.0xATR trail (Kaminski-Lo: regime tightening is
+  sign-wrong) + 40-day backstop. Bar: pooled cash avgR improves vs the
+  re-baselined tsmom pooled (avgR -0.152, sumRc -24.74, n=163) AND no
+  stress blowup (gfc/covid veto) AND CLEAN.
+- **#34 MR exit profile on rsi2** (same datasets): Connors-style exit
+  close>SMA5 (mirror short) decided on bars[:i], executed next open +
+  no partials/breakeven/trail (2xATR initial broker stop stays — the
+  no-stop canon is NOT licensed for fx/crypto and loss-capping is the
+  product) + 8-day backstop. Bar: pooled cash avgR improves vs
+  re-baselined rsi2 pooled AND CLEAN.
+Sensitivities: none. Exits decided strictly on completed bars (tested).
+
+---
+
+## 2026-08-14 — RESULTS: exit-style experiment (#33-34) + sizing study
+
+**#33 TREND profile (tsmom + reversal exit, no partials/BE, flat 3xATR
+trail): FAILS its bar.** Pooled: avgRc -0.152 -> -0.465, win 44.2 ->
+17.3%, n=98, all CLEAN. Stress fine (gfc +1.14%). HONEST READING: the
+canon profile needs markets that actually TREND; in this 6-month chop
+there was nothing to ride and unmanaged trades gave everything back
+before the reversal fired. Exactly the case the canon flags as
+undecidable at n<200 on one regime — walk-forward on multi-year data
+is where this profile gets its real trial. NOT adopted.
+
+**#34 MR profile (rsi2 + Connors close>SMA5 exit, no partials/BE/trail,
+8-day backstop, 2xATR broker stop kept): PASSES its pre-registered
+bar.** Pooled: avgRc -0.552 -> +0.019, win 27.3 -> 50.3%, sumRc -42.48
+-> +3.32, n=177, all CLEAN. The sleeve's own exit did the work (140/177
+exits). **Execution drag removed: +0.57R per trade** — the audit's
+central thesis, now measured on the fixed engine. Per Gate-0 this is
+ENGINEERING VERIFICATION, not promotion: +0.019 avgR is breakeven-ish,
+the claim is "the old exits were destroying 0.57R/trade", not "rsi2 is
+an edge".
+
+**Sizing study (oops india_wide, honest engine, RISK_PCT research
+override):** 1%/5%cap: +3.69%/MDD 1.98/Sharpe 2.41 -> 2%/10%cap:
+**+7.98%/3.48/Sharpe 2.70** -> 4%/20%cap: +6.48%/Sharpe 1.75 (heat/VAR
+bind, n halves). Carver's under-risking mechanism verified on our own
+engine: the 5% notional cap halves returns WITHOUT improving
+risk-adjusted performance; ~2x current cap is the sweet spot ON THIS
+SAMPLE. Config change deferred to walk-forward (Gate-0).
+
+**Research agents (full reports in-thread):**
+- Validation (verified vs published anchors): Gate-0/MinBTL says 32
+  trials need 4.4y of data; 6 months supports 2. Noise alone gives best
+  in-sample annSR ~2.97 at our N,T. NOTHING promotable until multi-year
+  fetch. 10-gate pipeline spec adopted for future use (M71 shipped).
+- Regime: keep the simple classifier; DELETE regime trail-tightening
+  (Kaminski-Lo: sign-wrong in non-momentum regimes — #33/#34 profiles
+  already embody this); add ~80th-pct realized-vol gate for MR entries
+  (Nagel; India volume conditioning per Parthasarathy); make SHOCK
+  persistent (Kritzman-Li) and use for entry/sizing only; skip HMMs
+  (Dacco-Satchell). ADX/choppiness: no evidence.
+- Meta-labeling: (agent pending at ledger time; report lands in-thread)
+
+Campaign M=34 configs. Suite green. All runs CLEAN. Next honest gate:
+the multi-year fetch, then walk-forward through the M71 pipeline.
+
+---
+
+## 2026-08-14 — campaign closed: meta-labeling verdict + standing law
+
+Meta-labeling agent (full report in-thread): fitted meta-models are a
+2027 project — at ~200 trades/sleeve the minimum detectable win-rate
+uplift (80% power) is 14.5pp vs the ~3-6pp the literature delivers;
+hand rules capture 99-100% of available gain at our n (simulation +
+Dana-Dawes small-n literature agree). ACTIONS: (1) hand-rule vol gates
+only, pre-registered, no fitting; (2) START LOGGING the per-entry
+feature vector now (vol percentile, signal conviction, regime) — the
+meta-labeling dataset cannot be backfilled; (3) fitted logit earliest
+at >=600 trades/sleeve + 2 vol regimes, must beat BOTH take-all and
+the hand rule on the same purged folds or it dies.
+
+STANDING LAW going forward (supersedes prior practice where stricter):
+- M71 validation pipeline is the promotion gate; trial ledger M=34,
+  increments forever, never resets.
+- No new configurations until the multi-year fetch lands (Gate-0).
+- Regime never touches stop distance. No HMMs. No fitted meta-models
+  yet. No challenge fees on current evidence.
+Report webpage published; branch pushed.

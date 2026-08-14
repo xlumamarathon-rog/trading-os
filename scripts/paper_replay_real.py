@@ -86,11 +86,17 @@ def sma(bars, i, n=20):
     return sum(b["close"] for b in bars[i - n:i]) / n
 
 
-def intrabar_path(bar, rng):
-    """Ticks inside the REAL bar. Up-bars: O→L→H→C. Down-bars: O→H→L→C.
-    Waypoint interpolation with noise, clamped to the true [low, high]."""
+def intrabar_path(bar, rng, held_dir=None):
+    """Ticks inside the REAL bar. audit BUG-6 FIX (2026-08-14): while a
+    position is OPEN the path visits the ADVERSE extreme first; otherwise
+    the close-direction heuristic stands. Clamped to the true [low, high]."""
     o, h, l, c = bar["open"], bar["high"], bar["low"], bar["close"]
-    way = [o, l, h, c] if c >= o else [o, h, l, c]
+    if held_dir == "buy":
+        way = [o, l, h, c]
+    elif held_dir == "sell":
+        way = [o, h, l, c]
+    else:
+        way = [o, l, h, c] if c >= o else [o, h, l, c]
     ticks = []
     per_leg = TICKS_PER_BAR // (len(way) - 1)
     for a, b in zip(way, way[1:]):
@@ -177,7 +183,10 @@ async def run():
     async def on_exit(sym, telemetry):
         exits_log.append({"symbol": sym, "reason": telemetry.exit_reason,
                           "realized_r": round(telemetry.realized_r, 2),
-                          "mfe_captured_pct": round(telemetry.mfe_captured_pct, 1)})
+                          "giveback_r": round(telemetry.giveback_r, 2),
+                          "capture_pct": (round(telemetry.capture_pct, 1)
+                                          if telemetry.capture_pct is not None
+                                          else None)})
 
     exit_mgr = ExitManager(CFG.model_extra["exit_manager"], CompositeStopAdapter(
         india_adapter=IndiaStopAdapter(conns.get_openalgo(), apikey="PAPER", algo_id="ALGO-PAPER-1"),
@@ -205,9 +214,11 @@ async def run():
             i = index_of[sym].get(date)
             if i is None or i < 21:
                 continue
-            bar, a = bars[i], atr14(bars, i)
+            bar = bars[i]
+            # audit BUG-1 FIX: risk inputs from completed bars only
+            a = atr14(bars, i - 1)
             s20 = sma(bars, i)
-            regime = real_regime(bars, i)
+            regime = real_regime(bars, i - 1)
             broker.on_tick(sym, bar["open"])
 
             # ---- entry: yesterday's close above SMA20, flat, real sizer via router
@@ -228,17 +239,24 @@ async def run():
                 else:
                     rejected[result.reason.split(":")[0]] = rejected.get(result.reason.split(":")[0], 0) + 1
 
-            # ---- replay the REAL bar tick by tick
-            ticks = intrabar_path(bar, rng)
+            # ---- replay the REAL bar tick by tick (audit BUG-2/3/6 fixes:
+            # adverse-first path for open positions; last sub-bar closes the
+            # daily bar; gap-aware stop fills via the window's first tick)
+            held = exit_mgr.positions.get(sym)
+            held_dir = held.direction if held and held.state != "EXITED" else None
+            ticks = intrabar_path(bar, rng, held_dir=held_dir)
             window = []
-            for px in ticks:
+            for t_i, px in enumerate(ticks):
                 clock += 1.0
                 broker.on_tick(sym, px)
                 await guard.process_tick(sym, Tick(ts=clock, price=px,
                                                    bid=px * 0.9999, ask=px * 1.0001, volume=1000))
                 window.append(px)
                 if len(window) == SUB_BAR:
-                    await exit_mgr.on_bar(sym, max(window), min(window), window[-1], regime)
+                    await exit_mgr.on_bar(sym, max(window), min(window),
+                                          window[-1], regime,
+                                          bar_closed=(t_i == len(ticks) - 1),
+                                          open_px=window[0])
                     window = []
         await redis.delete("PAUSE_ENTRIES")           # session boundary
         gate = advance_gate(gate_path, reconciliation_clean=True)
